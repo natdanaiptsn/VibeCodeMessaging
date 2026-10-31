@@ -232,7 +232,7 @@ function ImageUrlEditor({ value, onChange }: { value: unknown; onChange: (url: s
   const str = String(value ?? "");
   const check = str ? checkMediaUrl(str) : null;
   const upload = async (file: File) => {
-    if (file.size > 5 * 1024 * 1024) return toast.error("ไฟล์มีขนาดใหญ่เกิน 5 MB");
+    if (file.size > 4 * 1024 * 1024) return toast.error("ไฟล์มีขนาดใหญ่เกิน 4 MB");
     if (!["image/jpeg", "image/png"].includes(file.type)) return toast.error("รองรับเฉพาะ JPEG และ PNG");
     setUploading(true);
     try {
@@ -256,7 +256,7 @@ function ImageUrlEditor({ value, onChange }: { value: unknown; onChange: (url: s
         <div className="flex gap-1.5">
           <input ref={fileRef} type="file" accept="image/jpeg,image/png" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => fileRef.current?.click()} disabled={uploading}>
-            {uploading ? <Loader2 className="animate-spin" /> : <ImageUp />} อัปโหลด (≤ 5 MB)
+            {uploading ? <Loader2 className="animate-spin" /> : <ImageUp />} อัปโหลด (≤ 4 MB)
           </Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowLibrary((s) => !s)}>คลังรูป</Button>
         </div>

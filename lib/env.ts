@@ -23,6 +23,8 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
+  // รหัสสำหรับเรียก /api/cron/maintenance (Vercel Cron ส่งเป็น Authorization: Bearer <CRON_SECRET>)
+  CRON_SECRET: z.string().min(16, "CRON_SECRET ต้องยาวอย่างน้อย 16 ตัวอักษร").optional(),
   QUEUE_POLL_INTERVAL_MS: z.coerce.number().int().min(500).max(60000).default(3000),
   TRUST_PROXY: z
     .enum(["true", "false"])
@@ -49,5 +51,8 @@ export function env(): Env {
 /** URL สาธารณะของระบบ (ใช้สร้าง Webhook URL และ URL รูปภาพ) */
 export function appUrl(): string | null {
   const url = env().APP_URL;
-  return url ? url.replace(/\/+$/, "") : null;
+  if (url) return url.replace(/\/+$/, "");
+  // Vercel: ใช้โดเมน Production ของโปรเจกต์อัตโนมัติ หากไม่ได้กำหนด APP_URL
+  const vercelDomain = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  return vercelDomain ? `https://${vercelDomain.replace(/\/+$/, "")}` : null;
 }

@@ -90,7 +90,15 @@ async function ensureRule(r: RuleSeed) {
   });
 }
 
+const SEED_MARKER_KEY = "_seed";
+
 async function seedContent() {
+  // สร้างข้อมูลตัวอย่างเพียงครั้งเดียว — รัน seed ซ้ำ (เช่น ทุกครั้งที่ deploy บน Vercel) จะไม่สร้างกฎ/Template ที่ผู้ใช้ลบไปแล้วกลับมาอีก
+  const marker = await prisma.systemSetting.findUnique({ where: { key: SEED_MARKER_KEY } });
+  if (marker) {
+    console.log("✓ ข้อมูลเริ่มต้นถูกสร้างไว้แล้ว (ข้าม)");
+    return;
+  }
   const welcome = await ensureTextTemplate(
     "ข้อความต้อนรับ",
     "สวัสดีคุณ {{displayName}} 🎉\nขอบคุณที่เพิ่มเราเป็นเพื่อน\nพิมพ์ \"ราคา\" เพื่อดูราคา หรือ \"ติดต่อ\" เพื่อติดต่อเจ้าหน้าที่",
@@ -123,6 +131,11 @@ async function seedContent() {
     const v = key === "defaultReply" ? { ...value, enabled: true, textTemplateId: fallback.id, cooldownMinutes: 0 } : value;
     await prisma.systemSetting.upsert({ where: { key }, create: { key, value: v as Prisma.InputJsonValue }, update: {} });
   }
+  await prisma.systemSetting.upsert({
+    where: { key: SEED_MARKER_KEY },
+    create: { key: SEED_MARKER_KEY, value: { version: 1, seededAt: new Date().toISOString() } },
+    update: {},
+  });
   console.log("✓ สร้าง Template, Flex Message, กฎตอบกลับ และการตั้งค่าเริ่มต้น");
 }
 
