@@ -191,7 +191,7 @@ npm install
 cp .env.example .env
 ```
 
-แก้ไข `.env` อย่างน้อย `DATABASE_URL`, `ENCRYPTION_KEY`, `APP_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` — สร้าง `ENCRYPTION_KEY` ด้วย:
+แก้ไข `.env` อย่างน้อย `DATABASE_URL`, `ENCRYPTION_KEY`, `APP_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` — สร้าง `ENCRYPTION_KEY` ด้วย:
 
 ```bash
 openssl rand -base64 32
@@ -203,7 +203,7 @@ openssl rand -base64 32
 npx prisma migrate deploy
 ```
 
-สร้างผู้ดูแลระบบและข้อมูลตัวอย่าง (Template, Flex, กฎตอบกลับ):
+สร้างข้อมูลตัวอย่าง (Template, Flex, กฎตอบกลับ):
 
 ```bash
 npm run db:seed
@@ -215,16 +215,20 @@ npm run db:seed
 npm run dev
 ```
 
-เปิด http://localhost:3000 แล้วเข้าสู่ระบบด้วย `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+เปิด http://localhost:3000 แล้วเข้าสู่ระบบด้วย **ชื่อผู้ใช้** `ADMIN_USERNAME` และ**รหัสผ่าน** `ADMIN_PASSWORD` ที่ตั้งไว้ใน `.env` (ไม่ต้องใช้อีเมล)
 
 > ต้องการข้อมูลลูกค้าและสถิติจำลองสำหรับทดสอบหน้าจอ: ตั้ง `SEED_DEMO_DATA="true"` ก่อนรัน seed (ไม่ควรใช้ใน Production)
 
 > ทดสอบ Webhook ในเครื่องโดยต้องให้ LINE เข้าถึงได้ ให้ใช้ HTTPS tunnel เช่น `cloudflared tunnel --url http://localhost:3000` หรือ `ngrok http 3000` แล้วตั้ง `APP_URL` เป็น URL ที่ได้
 
-### สร้าง/รีเซ็ตผู้ดูแลระบบภายหลัง
+### ผู้ดูแลหลักและผู้ใช้เพิ่มเติม
+
+- **ผู้ดูแลหลัก (OWNER)** มาจาก `ADMIN_USERNAME` + `ADMIN_PASSWORD` ใน Environment โดยตรง — ระบบสร้างบัญชีให้อัตโนมัติตอนเข้าสู่ระบบครั้งแรก
+- **เปลี่ยนรหัสผ่าน/ชื่อผู้ใช้ของผู้ดูแลหลัก:** แก้ค่าใน `.env` (หรือ Vercel) แล้ว restart/redeploy — session เดิมจะถูกออกจากระบบ
+- **เพิ่มผู้ใช้คนอื่น:** หน้า **ตั้งค่าระบบ → ผู้ใช้งาน** (กำหนดชื่อผู้ใช้/อีเมล รหัสผ่าน และสิทธิ์) หรือใช้คำสั่ง
 
 ```bash
-npm run admin:create -- --email admin@example.com --name "ผู้ดูแล" --role OWNER
+npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 ```
 
 (ระบบจะถามรหัสผ่านแบบซ่อนตัวอักษร, ใช้ `--reset` เพื่อรีเซ็ตรหัสผ่านของผู้ใช้ที่มีอยู่)
@@ -249,7 +253,9 @@ npm run admin:create -- --email admin@example.com --name "ผู้ดูแล"
 | `QUEUE_WORKER_ENABLED` | | เปิด Background Worker (ค่าเริ่มต้น `true`, ปิดอัตโนมัติบน Vercel) |
 | `QUEUE_POLL_INTERVAL_MS` | | ความถี่ตรวจคิว (ค่าเริ่มต้น 3000) |
 | `LOG_LEVEL` | | ระดับ Log เริ่มต้น |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | Seed | ผู้ดูแลคนแรก (ไม่ hardcode รหัสผ่านในโค้ด) |
+| `ADMIN_USERNAME` | ✅ | ชื่อผู้ใช้ของผู้ดูแลหลักสำหรับเข้าสู่ระบบ (a-z, 0-9, `.`, `_`, `-` ยาว 3-50 ตัว) |
+| `ADMIN_PASSWORD` | ✅ | รหัสผ่านของผู้ดูแลหลัก (อย่างน้อย 8 ตัวอักษร) — แก้แล้ว restart/redeploy เพื่อเปลี่ยนรหัส |
+| `ADMIN_NAME` / `ADMIN_EMAIL` | | ชื่อที่แสดง / อีเมล (ถ้าไม่ตั้ง `ADMIN_USERNAME` จะใช้อีเมลเข้าสู่ระบบแทน) |
 | `SEED_DEMO_DATA` | | สร้างข้อมูลจำลองตอน seed |
 | `LINE_API_BASE_URL` / `LINE_DATA_API_BASE_URL` | | ใช้กับ Mock/Staging เท่านั้น (ค่าเริ่มต้นคือ LINE API จริง) |
 
@@ -364,7 +370,7 @@ https://<โดเมนของคุณ>/api/webhook/line
 cp .env.example .env
 ```
 
-แก้ไข `.env`: `POSTGRES_PASSWORD`, `ENCRYPTION_KEY`, `APP_URL=https://<โดเมน>`, `DOMAIN=<โดเมน>`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (ค่า `DATABASE_URL` ใน compose ถูกสร้างจาก POSTGRES_* ให้อัตโนมัติ)
+แก้ไข `.env`: `POSTGRES_PASSWORD`, `ENCRYPTION_KEY`, `APP_URL=https://<โดเมน>`, `DOMAIN=<โดเมน>`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` (ค่า `DATABASE_URL` ใน compose ถูกสร้างจาก POSTGRES_* ให้อัตโนมัติ)
 
 เริ่มระบบพร้อม HTTPS อัตโนมัติ (Caddy + Let's Encrypt):
 
@@ -395,7 +401,7 @@ git pull && docker compose --profile https up -d --build
 สร้างผู้ดูแลเพิ่มใน Docker:
 
 ```bash
-docker compose run --rm migrate npm run admin:create -- --email you@example.com --role OWNER
+docker compose run --rm migrate npm run admin:create -- --username somchai --role ADMIN
 ```
 
 > หากดึง image จาก Docker Hub ไม่ได้ ให้ระบุ registry อื่น เช่น `--build-arg NODE_IMAGE=mirror.gcr.io/library/node:22-bookworm-slim`
@@ -454,12 +460,12 @@ pm2 start .next/standalone/server.js --name line-oa-manager
    |---|---|
    | `ENCRYPTION_KEY` | ผลลัพธ์จาก `openssl rand -base64 32` (เก็บสำรองไว้ ห้ามเปลี่ยนภายหลัง) |
    | `CRON_SECRET` | ผลลัพธ์จาก `openssl rand -hex 24` |
-   | `ADMIN_EMAIL` | อีเมลผู้ดูแลคนแรก |
-   | `ADMIN_PASSWORD` | รหัสผ่านอย่างน้อย 10 ตัวอักษร มีตัวอักษรและตัวเลข (ลบออกได้หลัง deploy ครั้งแรก) |
+   | `ADMIN_USERNAME` | ชื่อผู้ใช้สำหรับเข้าสู่ระบบ เช่น `admin` (a-z, 0-9, `.`, `_`, `-`) |
+   | `ADMIN_PASSWORD` | รหัสผ่านอย่างน้อย 8 ตัวอักษร (ต้องเก็บไว้ — ใช้ทุกครั้งที่เข้าสู่ระบบ) |
    | `APP_URL` | (ไม่บังคับ) ใส่เมื่อใช้โดเมนของตัวเอง เช่น `https://bot.example.com` |
 
 4. กด **Deploy** (ถ้าเพิ่มตัวแปรหลังจาก deploy ไปแล้ว ให้กด **Redeploy**) — ดู Build Logs จะเห็นขั้นตอน migrate และ seed
-5. เปิด `https://<ชื่อโปรเจกต์>.vercel.app` เข้าสู่ระบบ แล้วตั้งค่าในหน้า **LINE OA Settings** และ Webhook ตามหัวข้อ [วิธีตั้งค่า Webhook](#วิธีตั้งค่า-webhook)
+5. เปิด `https://<ชื่อโปรเจกต์>.vercel.app` เข้าสู่ระบบด้วย `ADMIN_USERNAME` / `ADMIN_PASSWORD` แล้วตั้งค่าในหน้า **LINE OA Settings** และ Webhook ตามหัวข้อ [วิธีตั้งค่า Webhook](#วิธีตั้งค่า-webhook)
 
 **(ไม่บังคับ) ให้ระบบส่งซ้ำ/กู้งานค้างถี่ขึ้น** — Vercel Cron แพ็กเกจฟรีรันได้วันละครั้ง สามารถใช้บริการ Cron ภายนอกที่ฟรี เช่น [cron-job.org](https://cron-job.org) ให้เรียกทุก 5–10 นาที:
 
@@ -544,7 +550,7 @@ pg_restore --clean --if-exists --no-owner -d "postgresql://user:pass@host:5432/l
 | CSRF | Cookie `SameSite=Lax` + ตรวจ `Origin`/`Sec-Fetch-Site` ทุกคำขอที่เปลี่ยนข้อมูล + บังคับ `Content-Type: application/json` |
 | Authentication | Session token สุ่ม 256-bit เก็บเฉพาะ SHA-256 ในฐานข้อมูล, httpOnly, sliding expiration, ยกเลิก session เมื่อเปลี่ยนรหัสผ่าน |
 | รหัสผ่าน | bcrypt (cost 12), นโยบายรหัสผ่าน, ล็อกบัญชีชั่วคราวเมื่อผิด 5 ครั้ง, ป้องกัน user enumeration |
-| Rate Limiting | Login (ต่อ IP/อีเมล), API ทั่วไป (ต่อผู้ใช้), endpoint สำคัญ, Webhook, Media |
+| Rate Limiting | Login (ต่อ IP/ชื่อผู้ใช้), API ทั่วไป (ต่อผู้ใช้), endpoint สำคัญ, Webhook, Media |
 | Validation | Zod ทุก API + Flex validator + จำกัดขนาด body |
 | Authorization | สิทธิ์ตามบทบาทตรวจซ้ำที่ทุก Route Handler และทุกหน้า |
 | Credentials | เข้ารหัส AES-256-GCM, ไม่ส่งไป Frontend (ส่งเฉพาะสถานะว่าตั้งค่าแล้ว), รองรับเก็บใน Environment |
@@ -599,7 +605,7 @@ npx tsx scripts/simulate-webhook.ts --text "ราคา" --url http://localhost
 | LINE ตอบซ้ำ 2 ข้อความ | ปิด Auto-response messages ใน LINE Official Account Manager |
 | รูปใน Flex ไม่แสดงใน LINE | URL ต้องเป็น HTTPS ที่ LINE เข้าถึงได้ (ตั้ง `APP_URL` เป็น HTTPS เมื่อใช้รูปที่อัปโหลด) |
 | ถอดรหัส Credentials ไม่ได้ | เปลี่ยน `ENCRYPTION_KEY` — ให้บันทึก Credentials ใหม่ในหน้า LINE OA Settings |
-| ลืมรหัสผ่าน | `npm run admin:create -- --email <อีเมล> --reset` |
+| ลืมรหัสผ่าน | ผู้ดูแลหลัก: ดู/แก้ `ADMIN_PASSWORD` ใน `.env` หรือ Vercel แล้ว restart/redeploy · ผู้ใช้อื่น: `npm run admin:create -- --username <ชื่อผู้ใช้> --reset` |
 | Vercel: build ล้มเหลวที่ `prisma migrate deploy` | ตรวจว่าเชื่อม Neon แล้ว และมี `DATABASE_URL` (และ `DATABASE_URL_UNPOOLED`) ใน Environment Production |
 | Vercel: Cron ได้ 503 | ยังไม่ได้ตั้ง `CRON_SECRET` แล้ว Redeploy |
 

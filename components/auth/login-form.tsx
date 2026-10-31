@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function LoginForm({ next }: { next: string }) {
     setLoading(true);
     setError(null);
     try {
-      await apiFetch("/api/auth/login", { method: "POST", body: { email, password } });
+      await apiFetch("/api/auth/login", { method: "POST", body: { username, password } });
       toast.success("เข้าสู่ระบบสำเร็จ");
       router.replace(next);
       router.refresh();
@@ -43,8 +43,19 @@ export function LoginForm({ next }: { next: string }) {
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="grid gap-4">
-          <Field label="อีเมล" htmlFor="email">
-            <Input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Field label="ชื่อผู้ใช้" htmlFor="username">
+            <Input
+              id="username"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+              autoFocus
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
           </Field>
           <Field label="รหัสผ่าน" htmlFor="password">
             <Input

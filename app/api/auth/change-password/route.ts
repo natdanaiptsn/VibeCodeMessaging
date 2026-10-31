@@ -11,6 +11,9 @@ import { tooManyRequests } from "@/lib/errors";
 export const POST = route({ rateLimitPerMinute: 10 }, async (ctx) => {
   const rl = rateLimit(`chpw:${ctx.session.user.id}`, 5, 15 * 60_000);
   if (!rl.allowed) throw tooManyRequests(undefined, rl.retryAfterSec);
+  if (ctx.session.user.passwordManagedByEnv) {
+    throw badRequest("รหัสผ่านของบัญชีนี้ตั้งจาก ADMIN_PASSWORD ใน Environment Variables — แก้ไขที่ Vercel แล้ว Redeploy");
+  }
   const input = changePasswordSchema.parse(await readJson(ctx.req, 4096));
   const user = await prisma.user.findUniqueOrThrow({ where: { id: ctx.session.user.id } });
   if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {

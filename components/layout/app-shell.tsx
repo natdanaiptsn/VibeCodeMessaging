@@ -85,9 +85,11 @@ function UserMenu({ user }: { user: AppUser }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
+        <DropdownMenuLabel className="truncate">{user.username ?? user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => router.push("/settings?tab=account")}>เปลี่ยนรหัสผ่าน</DropdownMenuItem>
+        {!user.passwordManagedByEnv && (
+          <DropdownMenuItem onSelect={() => router.push("/settings?tab=account")}>เปลี่ยนรหัสผ่าน</DropdownMenuItem>
+        )}
         <DropdownMenuItem variant="destructive" onSelect={logout}>
           <LogOut /> ออกจากระบบ
         </DropdownMenuItem>

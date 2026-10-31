@@ -3,7 +3,14 @@
 import { createContext, useContext } from "react";
 import { can, type Permission, type Role } from "@/lib/auth/permissions";
 
-export type AppUser = { id: string; email: string; name: string; role: Role };
+export type AppUser = {
+  id: string;
+  username: string | null;
+  email: string | null;
+  name: string;
+  role: Role;
+  passwordManagedByEnv: boolean;
+};
 export type AppContextValue = { user: AppUser; timezone: string };
 
 const AppContext = createContext<AppContextValue | null>(null);

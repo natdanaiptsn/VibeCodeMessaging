@@ -4,15 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 import { randomToken, sha256Hex } from "@/lib/crypto";
 import type { Role } from "@/lib/auth/permissions";
+import { envAdminSessionStillValid, isEnvAdminUser } from "@/lib/auth/env-admin";
 
 export const SESSION_COOKIE = "lineoa_session";
 const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 
 export type SessionUser = {
   id: string;
-  email: string;
+  username: string | null;
+  email: string | null;
   name: string;
   role: Role;
+  /** รหัสผ่านตั้งจาก ADMIN_PASSWORD ใน Environment (เปลี่ยนผ่านหน้าเว็บไม่ได้) */
+  passwordManagedByEnv: boolean;
 };
 
 export type AuthSession = {
@@ -67,7 +71,7 @@ export async function getSession(): Promise<AuthSession | null> {
 export async function getSessionByToken(token: string): Promise<AuthSession | null> {
   const session = await prisma.session.findUnique({
     where: { tokenHash: sha256Hex(token) },
-    include: { user: { select: { id: true, email: true, name: true, role: true, isActive: true } } },
+    include: { user: { select: { id: true, username: true, email: true, name: true, role: true, isActive: true, passwordHash: true } } },
   });
   if (!session) return null;
   const now = Date.now();
@@ -83,7 +87,11 @@ export async function getSessionByToken(token: string): Promise<AuthSession | nu
       .catch(() => undefined);
     session.expiresAt = expiresAt;
   }
-  const { isActive: _isActive, ...user } = session.user;
+  const { isActive: _isActive, passwordHash, ...rest } = session.user;
+  const passwordManagedByEnv = isEnvAdminUser(rest);
+  // ผู้ดูแลหลัก: ถ้า ADMIN_PASSWORD ถูกเปลี่ยนหลังจากเข้าสู่ระบบ ให้ session นี้หมดอายุทันที
+  if (passwordManagedByEnv && !(await envAdminSessionStillValid(rest.id, passwordHash))) return null;
+  const user: SessionUser = { ...rest, passwordManagedByEnv };
   return { sessionId: session.id, user, expiresAt: session.expiresAt };
 }
 
