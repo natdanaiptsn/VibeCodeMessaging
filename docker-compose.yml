@@ -1,0 +1,76 @@
+# ═══════════════════════════════════════════════════════════════
+#  LINE OA Auto Reply Manager — docker compose
+#  เริ่มต้น:  docker compose up -d --build
+#  HTTPS อัตโนมัติด้วย Caddy:  docker compose --profile https up -d --build
+# ═══════════════════════════════════════════════════════════════
+name: line-oa-manager
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lineoa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ต้องกำหนด POSTGRES_PASSWORD ใน .env}
+      POSTGRES_DB: ${POSTGRES_DB:-lineoa}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # รัน migration + seed ก่อนเริ่มแอป (ทำงานครั้งเดียวแล้วจบ)
+  migrate:
+    build:
+      context: .
+      target: tools
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lineoa}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lineoa}?schema=public
+    command: ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lineoa}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-lineoa}?schema=public
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Reverse proxy + HTTPS (Let's Encrypt) อัตโนมัติ — เปิดด้วย --profile https
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
