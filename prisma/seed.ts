@@ -1,11 +1,10 @@
 /**
  * Seed ข้อมูลเริ่มต้นและข้อมูลตัวอย่าง
- * - ผู้ดูแลระบบ: อ่านจาก ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME (ไม่ hardcode รหัสผ่าน)
+ * - ผู้ดูแลหลักไม่ได้สร้างที่นี่: ระบบใช้ ADMIN_USERNAME / ADMIN_PASSWORD จาก Environment ตอนเข้าสู่ระบบ
  * - Template / Flex / กฎตอบกลับตัวอย่าง
  * - ข้อมูลลูกค้าและข้อความจำลอง (เฉพาะเมื่อ SEED_DEMO_DATA=true)
  */
 import "dotenv/config";
-import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, type Prisma } from "../lib/generated/prisma/client";
 import { FLEX_PRESETS } from "../lib/flex/presets";
@@ -13,26 +12,6 @@ import { normalizeText } from "../lib/auto-reply/normalize";
 import { DEFAULT_SETTINGS } from "../lib/validation/settings";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
-
-async function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD;
-  const name = process.env.ADMIN_NAME?.trim() || "ผู้ดูแลระบบ";
-  if (!email || !password) {
-    console.warn("⚠️  ข้ามการสร้างผู้ดูแล: ไม่ได้กำหนด ADMIN_EMAIL / ADMIN_PASSWORD (สร้างภายหลังด้วย npm run admin:create)");
-    return;
-  }
-  if (password.length < 10 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
-    throw new Error("ADMIN_PASSWORD ต้องมีอย่างน้อย 10 ตัวอักษร และมีทั้งตัวอักษรและตัวเลข");
-  }
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    console.log(`✓ ผู้ดูแล ${email} มีอยู่แล้ว (ไม่เปลี่ยนรหัสผ่าน)`);
-    return;
-  }
-  await prisma.user.create({ data: { email, name, role: "OWNER", passwordHash: await bcrypt.hash(password, 12) } });
-  console.log(`✓ สร้างผู้ดูแล ${email} (OWNER)`);
-}
 
 async function ensureTextTemplate(name: string, content: string, description?: string) {
   const found = await prisma.replyTemplate.findFirst({ where: { name } });
@@ -200,7 +179,6 @@ async function seedDemo(accountId: string) {
 }
 
 async function main() {
-  await seedAdmin();
   const account = await ensureLineAccount();
   await seedContent();
   await seedDemo(account.id);

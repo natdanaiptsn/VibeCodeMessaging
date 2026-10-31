@@ -18,6 +18,11 @@ const envSchema = z.object({
   // สำหรับทดสอบกับ Mock Server / Staging เท่านั้น (ค่าเริ่มต้นคือ LINE API จริง)
   LINE_API_BASE_URL: z.url().default("https://api.line.me"),
   LINE_DATA_API_BASE_URL: z.url().default("https://api-data.line.me"),
+  // ผู้ดูแลหลัก: ล็อกอินด้วย ADMIN_USERNAME (หรือ ADMIN_EMAIL) + ADMIN_PASSWORD ที่ตั้งใน Environment
+  ADMIN_USERNAME: z.string().optional(),
+  ADMIN_EMAIL: z.string().optional(),
+  ADMIN_PASSWORD: z.string().optional(),
+  ADMIN_NAME: z.string().optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
   QUEUE_WORKER_ENABLED: z
     .enum(["true", "false"])

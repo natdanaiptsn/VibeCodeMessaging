@@ -233,11 +233,30 @@ function AccountTab() {
       setSaving(false);
     }
   };
+  const identity = user.username ?? user.email ?? "-";
+  if (user.passwordManagedByEnv) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-primary" /> รหัสผ่านผู้ดูแลหลัก</CardTitle>
+          <CardDescription>{user.name} ({identity}) · {ROLE_LABELS[user.role]}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>บัญชีนี้ใช้ชื่อผู้ใช้และรหัสผ่านที่ตั้งไว้ใน Environment Variables</p>
+          <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+            <li>เข้า Vercel → โปรเจกต์ → <strong>Environment Variables</strong></li>
+            <li>แก้ค่า <code>ADMIN_PASSWORD</code> (อย่างน้อย 8 ตัวอักษร) หรือ <code>ADMIN_USERNAME</code></li>
+            <li>ไปที่ <strong>Deployments</strong> แล้วกด <strong>Redeploy</strong> — รหัสใหม่ใช้ได้ทันที และ session เดิมจะถูกออกจากระบบ</li>
+          </ol>
+        </CardContent>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-primary" /> เปลี่ยนรหัสผ่าน Admin</CardTitle>
-        <CardDescription>{user.name} ({user.email}) · {ROLE_LABELS[user.role]}</CardDescription>
+        <CardDescription>{user.name} ({identity}) · {ROLE_LABELS[user.role]}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="grid max-w-md gap-4">
@@ -259,14 +278,25 @@ function AccountTab() {
   );
 }
 
-type UserRow = { id: string; email: string; name: string; role: Role; isActive: boolean; lastLoginAt: string | null; lockedUntil: string | null; createdAt: string };
+type UserRow = {
+  id: string;
+  username: string | null;
+  email: string | null;
+  name: string;
+  role: Role;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  lockedUntil: string | null;
+  createdAt: string;
+  managedByEnv: boolean;
+};
 
 function UsersTab() {
   const { user: me, timezone } = useAppContext();
   const qc = useQueryClient();
   const { data, isLoading, error, refetch } = useApiQuery<UserRow[]>(["users"], "/api/users");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ email: "", name: "", role: "ADMIN" as Role, password: "" });
+  const [form, setForm] = useState({ username: "", email: "", name: "", role: "ADMIN" as Role, password: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<UserRow | null>(null);
@@ -292,7 +322,7 @@ function UsersTab() {
       await apiFetch("/api/users", { method: "POST", body: form });
       toast.success("เพิ่มผู้ใช้แล้ว");
       setCreateOpen(false);
-      setForm({ email: "", name: "", role: "ADMIN", password: "" });
+      setForm({ username: "", email: "", name: "", role: "ADMIN", password: "" });
       await qc.invalidateQueries({ queryKey: ["users"] });
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -332,10 +362,13 @@ function UsersTab() {
               <TableRow key={u.id}>
                 <TableCell>
                   <p className="font-medium">{u.name} {u.id === me.id && <Badge variant="secondary">คุณ</Badge>}</p>
-                  <p className="text-xs text-muted-foreground">{u.email}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {[u.username, u.email].filter(Boolean).join(" · ")}
+                    {u.managedByEnv && <Badge variant="info" className="ml-1.5">ตั้งค่าจาก Environment</Badge>}
+                  </p>
                 </TableCell>
                 <TableCell>
-                  <Select value={u.role} onValueChange={(v) => update.mutate({ id: u.id, data: { role: v as Role } })}>
+                  <Select value={u.role} disabled={u.managedByEnv} onValueChange={(v) => update.mutate({ id: u.id, data: { role: v as Role } })}>
                     <SelectTrigger size="sm" className="w-36"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {(Object.keys(ROLE_LABELS) as Role[]).map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
@@ -344,13 +377,13 @@ function UsersTab() {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <Switch checked={u.isActive} disabled={u.id === me.id} onCheckedChange={(v) => update.mutate({ id: u.id, data: { isActive: v } })} />
+                    <Switch checked={u.isActive} disabled={u.id === me.id || u.managedByEnv} onCheckedChange={(v) => update.mutate({ id: u.id, data: { isActive: v } })} />
                     {u.lockedUntil && new Date(u.lockedUntil) > new Date() && <Badge variant="warning">ล็อกชั่วคราว</Badge>}
                   </div>
                 </TableCell>
                 <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{formatDateTime(u.lastLoginAt, timezone)}</TableCell>
                 <TableCell>
-                  {u.id !== me.id && (
+                  {u.id !== me.id && !u.managedByEnv && (
                     <Button variant="ghost" size="icon-sm" className="text-destructive" onClick={() => setDeleting(u)} aria-label="ลบผู้ใช้"><Trash2 /></Button>
                   )}
                 </TableCell>
@@ -367,7 +400,10 @@ function UsersTab() {
           </DialogHeader>
           <div className="grid gap-3">
             <Field label="ชื่อ" htmlFor="u-name" error={errors.name}><Input id="u-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-            <Field label="อีเมล" htmlFor="u-email" error={errors.email}><Input id="u-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+            <Field label="ชื่อผู้ใช้" htmlFor="u-username" error={errors.username} hint="ใช้เข้าสู่ระบบ: a-z, 0-9, จุด, ขีดล่าง, ขีดกลาง (3-50 ตัว)">
+              <Input id="u-username" autoCapitalize="none" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+            </Field>
+            <Field label="อีเมล (ไม่บังคับ)" htmlFor="u-email" error={errors.email}><Input id="u-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
             <Field label="สิทธิ์" error={errors.role}>
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as Role })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -388,7 +424,7 @@ function UsersTab() {
         open={Boolean(deleting)}
         onOpenChange={(o) => !o && setDeleting(null)}
         title="ลบผู้ใช้"
-        description={`ต้องการลบ ${deleting?.email} ใช่หรือไม่?`}
+        description={`ต้องการลบ ${deleting?.username ?? deleting?.email} ใช่หรือไม่?`}
         confirmLabel="ลบ"
         destructive
         loading={remove.isPending}
@@ -398,7 +434,7 @@ function UsersTab() {
   );
 }
 
-type AuditRow = { id: string; action: string; entityType: string; entityId: string | null; summary: string | null; ipAddress: string | null; createdAt: string; user: { name: string; email: string } | null };
+type AuditRow = { id: string; action: string; entityType: string; entityId: string | null; summary: string | null; ipAddress: string | null; createdAt: string; user: { name: string; email: string | null } | null };
 
 function AuditTab() {
   const { timezone } = useAppContext();

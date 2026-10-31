@@ -1,9 +1,16 @@
 import { z } from "zod";
 
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email("อีเมลไม่ถูกต้อง").max(200),
+  // ชื่อผู้ใช้ หรืออีเมล
+  username: z.string().trim().toLowerCase().min(1, "กรุณากรอกชื่อผู้ใช้").max(200),
   password: z.string().min(1, "กรุณากรอกรหัสผ่าน").max(200),
 });
+
+export const usernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9._-]{3,50}$/, "ชื่อผู้ใช้ใช้ได้เฉพาะ a-z, 0-9, จุด, ขีดล่าง, ขีดกลาง ความยาว 3-50 ตัว");
 
 export const passwordPolicy = z
   .string()
@@ -28,12 +35,15 @@ export const changePasswordSchema = z
 
 export const roleSchema = z.enum(["OWNER", "ADMIN", "AGENT"]);
 
-export const createUserSchema = z.object({
-  email: z.string().trim().toLowerCase().email("อีเมลไม่ถูกต้อง").max(200),
-  name: z.string().trim().min(1, "กรุณากรอกชื่อ").max(100),
-  role: roleSchema,
-  password: passwordPolicy,
-});
+export const createUserSchema = z
+  .object({
+    username: z.preprocess((v) => (v === "" ? undefined : v), usernameSchema.optional()),
+    email: z.preprocess((v) => (v === "" ? undefined : v), z.string().trim().toLowerCase().email("อีเมลไม่ถูกต้อง").max(200).optional()),
+    name: z.string().trim().min(1, "กรุณากรอกชื่อ").max(100),
+    role: roleSchema,
+    password: passwordPolicy,
+  })
+  .refine((d) => d.username || d.email, { message: "กรุณากรอกชื่อผู้ใช้หรืออีเมลอย่างน้อยหนึ่งอย่าง", path: ["username"] });
 
 export const updateUserSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
