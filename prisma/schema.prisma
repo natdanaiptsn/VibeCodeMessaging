@@ -1,0 +1,455 @@
+// LINE OA Auto Reply Manager — Prisma Schema
+// ใช้ UUID (v7 สำหรับตารางที่มีข้อมูลจำนวนมาก เพื่อให้ index เรียงตามเวลา)
+// ทุกตารางมี createdAt / updatedAt และใช้ timestamptz
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum UserRole {
+  OWNER // จัดการได้ทุกอย่าง รวมถึง LINE Credentials และผู้ใช้
+  ADMIN // จัดการกฎ, Template, ตั้งค่าระบบ
+  AGENT // ใช้งานกล่องข้อความและดูข้อมูลลูกค้า
+}
+
+enum ConnectionStatus {
+  UNKNOWN
+  CONNECTED
+  FAILED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+  STICKER
+  LOCATION
+  POSTBACK
+  FOLLOW
+  UNFOLLOW
+  FLEX
+  OTHER
+}
+
+enum MessageStatus {
+  PENDING // รอประมวลผล
+  PROCESSING // กำลังประมวลผล
+  REPLIED // ตอบกลับสำเร็จ
+  NO_REPLY // ไม่มีกฎที่ตรงกัน / ปิดระบบตอบกลับ
+  SENT // ข้อความขาออกที่ส่งสำเร็จ
+  FAILED // ส่ง/ตอบกลับไม่สำเร็จ
+}
+
+enum WebhookEventStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+  SKIPPED
+}
+
+enum RuleTrigger {
+  TEXT // ข้อความตัวอักษร (ใช้ Keyword)
+  POSTBACK // Postback data (ใช้ Keyword กับ data)
+  FOLLOW // เพิ่มเพื่อน / ปลดบล็อก
+  IMAGE // ส่งรูปภาพ
+  STICKER // ส่งสติกเกอร์
+  LOCATION // ส่งตำแหน่ง
+}
+
+enum MatchType {
+  EXACT
+  CONTAINS
+  STARTS_WITH
+  ENDS_WITH
+  REGEX
+}
+
+enum KeywordLogic {
+  ANY // ตรงกับ Keyword ใด Keyword หนึ่ง
+  ALL // ต้องตรงทุก Keyword
+}
+
+enum ReplyContentType {
+  TEXT
+  FLEX
+  MIXED
+}
+
+enum ReplyStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+}
+
+enum ReplyMethod {
+  REPLY
+  PUSH
+}
+
+enum ReplySource {
+  RULE
+  DEFAULT
+  ADMIN
+  RETRY
+}
+
+// ───────────────────────────── Auth ─────────────────────────────
+
+model User {
+  id                String    @id @default(uuid()) @db.Uuid
+  email             String    @unique
+  name              String
+  passwordHash      String
+  role              UserRole  @default(ADMIN)
+  isActive          Boolean   @default(true)
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime? @db.Timestamptz(3)
+  lastLoginAt       DateTime? @db.Timestamptz(3)
+  passwordChangedAt DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+
+  sessions       Session[]
+  auditLogs      AuditLog[]
+  sentMessages   Message[]       @relation("MessageSentBy")
+  replyLogs      ReplyLog[]      @relation("ReplyLogTriggeredBy")
+  rulesCreated   ReplyRule[]     @relation("RuleCreatedBy")
+  rulesUpdated   ReplyRule[]     @relation("RuleUpdatedBy")
+  textTemplates  ReplyTemplate[] @relation("TemplateCreatedBy")
+  flexTemplates  FlexTemplate[]  @relation("FlexCreatedBy")
+  settingUpdates SystemSetting[] @relation("SettingUpdatedBy")
+  mediaAssets    MediaAsset[]    @relation("MediaUploadedBy")
+
+  @@index([role])
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  tokenHash  String   @unique // SHA-256 ของ session token (ไม่เก็บ token จริง)
+  userId     String   @db.Uuid
+  expiresAt  DateTime @db.Timestamptz(3)
+  lastUsedAt DateTime @default(now()) @db.Timestamptz(3)
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ───────────────────────────── LINE ─────────────────────────────
+
+model LineAccount {
+  id                    String           @id @default(uuid()) @db.Uuid
+  name                  String
+  channelId             String?
+  botUserId             String?          @unique // destination ใน Webhook
+  basicId               String?
+  displayName           String?
+  pictureUrl            String?
+  channelSecretEnc      String? // เข้ารหัส AES-256-GCM
+  channelAccessTokenEnc String? // เข้ารหัส AES-256-GCM
+  credentialsUpdatedAt  DateTime?        @db.Timestamptz(3)
+  isDefault             Boolean          @default(true)
+  isActive              Boolean          @default(true)
+  connectionStatus      ConnectionStatus @default(UNKNOWN)
+  connectionError       String?
+  lastVerifiedAt        DateTime?        @db.Timestamptz(3)
+  lastWebhookAt         DateTime?        @db.Timestamptz(3)
+  createdAt             DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime         @updatedAt @db.Timestamptz(3)
+
+  customers     Customer[]
+  messages      Message[]
+  webhookEvents WebhookEvent[]
+  replyLogs     ReplyLog[]
+
+  @@index([isDefault, isActive])
+}
+
+model Customer {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  lineAccountId    String    @db.Uuid
+  lineUserId       String
+  displayName      String?
+  pictureUrl       String?
+  statusMessage    String?
+  language         String?
+  isFollowing      Boolean   @default(true)
+  followedAt       DateTime? @db.Timestamptz(3)
+  unfollowedAt     DateTime? @db.Timestamptz(3)
+  lastMessageAt    DateTime? @db.Timestamptz(3)
+  lastMessageText  String?
+  lastMessageType  MessageType?
+  messageCount     Int       @default(0)
+  profileSyncedAt  DateTime? @db.Timestamptz(3)
+  note             String?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  lineAccount LineAccount @relation(fields: [lineAccountId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  replyLogs   ReplyLog[]
+
+  @@unique([lineAccountId, lineUserId])
+  @@index([lineAccountId, lastMessageAt(sort: Desc)])
+  @@index([displayName])
+  @@index([lineUserId])
+  @@index([isFollowing])
+}
+
+model WebhookEvent {
+  id             String             @id @default(uuid(7)) @db.Uuid
+  lineAccountId  String             @db.Uuid
+  webhookEventId String             @unique // ใช้ป้องกัน Event ซ้ำ / Redelivery
+  type           String
+  mode           String?
+  sourceType     String?
+  sourceUserId   String?
+  eventTimestamp DateTime           @db.Timestamptz(3)
+  isRedelivery   Boolean            @default(false)
+  payload        Json // event ดิบ (ตัด replyToken ออกแล้ว)
+  replyTokenEnc  String? // เข้ารหัส และลบทิ้งหลังประมวลผล
+  status         WebhookEventStatus @default(PENDING)
+  attempts       Int                @default(0)
+  availableAt    DateTime           @default(now()) @db.Timestamptz(3)
+  lockedAt       DateTime?          @db.Timestamptz(3)
+  processedAt    DateTime?          @db.Timestamptz(3)
+  lastError      String?
+  createdAt      DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @db.Timestamptz(3)
+
+  lineAccount LineAccount @relation(fields: [lineAccountId], references: [id], onDelete: Cascade)
+  message     Message?
+  replyLog    ReplyLog?
+
+  @@index([status, availableAt])
+  @@index([sourceUserId])
+  @@index([createdAt])
+}
+
+model Message {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  lineAccountId  String           @db.Uuid
+  customerId     String           @db.Uuid
+  webhookEventId String?          @unique @db.Uuid
+  direction      MessageDirection
+  type           MessageType
+  text           String?
+  payload        Json?
+  lineMessageId  String?          @unique
+  status         MessageStatus    @default(PENDING)
+  sentById       String?          @db.Uuid
+  replyLogId     String?          @db.Uuid
+  timestamp      DateTime         @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  lineAccount  LineAccount   @relation(fields: [lineAccountId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+  sentBy       User?         @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  replyLog     ReplyLog?     @relation("ReplyLogOutbound", fields: [replyLogId], references: [id], onDelete: SetNull)
+  sourceOf     ReplyLog[]    @relation("ReplyLogSource")
+
+  @@index([customerId, timestamp(sort: Desc)])
+  @@index([lineAccountId, timestamp(sort: Desc)])
+  @@index([direction, timestamp])
+  @@index([type])
+  @@index([status])
+  @@index([text(ops: raw("gin_trgm_ops"))], type: Gin, map: "Message_text_trgm_idx")
+}
+
+// ───────────────────────────── Auto Reply ─────────────────────────────
+
+model ReplyTemplate {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  content     String
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  createdBy User?       @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  rules     ReplyRule[]
+
+  @@index([name])
+  @@index([updatedAt])
+}
+
+model FlexTemplate {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  description   String?
+  altText       String
+  containerType String // bubble | carousel
+  contents      Json
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  createdBy User?       @relation("FlexCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  rules     ReplyRule[]
+
+  @@index([name])
+  @@index([updatedAt])
+}
+
+model ReplyRule {
+  id             String           @id @default(uuid()) @db.Uuid
+  name           String
+  description    String?
+  isActive       Boolean          @default(true)
+  priority       Int              @default(0) // ค่ามาก = สำคัญกว่า
+  triggerType    RuleTrigger      @default(TEXT)
+  matchType      MatchType        @default(CONTAINS)
+  keywordLogic   KeywordLogic     @default(ANY)
+  caseSensitive  Boolean          @default(false)
+  replyType      ReplyContentType
+  textTemplateId String?          @db.Uuid
+  flexTemplateId String?          @db.Uuid
+  matchCount     Int              @default(0)
+  lastMatchedAt  DateTime?        @db.Timestamptz(3)
+  createdById    String?          @db.Uuid
+  updatedById    String?          @db.Uuid
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  textTemplate ReplyTemplate? @relation(fields: [textTemplateId], references: [id], onDelete: Restrict)
+  flexTemplate FlexTemplate?  @relation(fields: [flexTemplateId], references: [id], onDelete: Restrict)
+  createdBy    User?          @relation("RuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?          @relation("RuleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  keywords     ReplyKeyword[]
+  replyLogs    ReplyLog[]
+
+  @@index([isActive, triggerType, priority(sort: Desc)])
+  @@index([textTemplateId])
+  @@index([flexTemplateId])
+}
+
+model ReplyKeyword {
+  id                String   @id @default(uuid()) @db.Uuid
+  ruleId            String   @db.Uuid
+  keyword           String
+  normalizedKeyword String
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  rule ReplyRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, normalizedKeyword])
+  @@index([normalizedKeyword])
+}
+
+model ReplyLog {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  lineAccountId     String?          @db.Uuid
+  customerId        String?          @db.Uuid
+  sourceMessageId   String?          @db.Uuid
+  webhookEventId    String?          @unique @db.Uuid // 1 Event = ตอบกลับได้ครั้งเดียว
+  ruleId            String?          @db.Uuid
+  ruleName          String? // snapshot ชื่อกฎ ณ เวลาที่ตอบ
+  matchedRules      Json? // [{ id, name, keyword }]
+  matchedKeyword    String?
+  source            ReplySource
+  method            ReplyMethod
+  replyType         ReplyContentType
+  status            ReplyStatus      @default(PENDING)
+  requestMessages   Json? // ข้อความที่ส่ง (ไม่มี token)
+  responseStatus    Int?
+  responseBody      Json? // เฉพาะข้อมูลที่จำเป็น
+  lineRequestId     String?
+  retryKey          String?          @unique // X-Line-Retry-Key ป้องกันส่งซ้ำ
+  errorMessage      String?
+  attempts          Int              @default(0)
+  triggeredById     String?          @db.Uuid
+  retryOfId         String?          @db.Uuid
+  startedAt         DateTime?        @db.Timestamptz(3)
+  completedAt       DateTime?        @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+
+  lineAccount   LineAccount?  @relation(fields: [lineAccountId], references: [id], onDelete: SetNull)
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sourceMessage Message?      @relation("ReplyLogSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
+  webhookEvent  WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
+  rule          ReplyRule?    @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  triggeredBy   User?         @relation("ReplyLogTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  outbound      Message[]     @relation("ReplyLogOutbound")
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([customerId])
+  @@index([ruleId])
+  @@index([source])
+}
+
+// ───────────────────────────── System ─────────────────────────────
+
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  value       Json
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  updatedBy User? @relation("SettingUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String?  @db.Uuid
+  action     String // เช่น rule.create, settings.update
+  entityType String
+  entityId   String?
+  summary    String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([action])
+}
+
+model MediaAsset {
+  id           String   @id @default(uuid()) @db.Uuid
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String   @unique
+  data         Bytes
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  uploadedBy User? @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}

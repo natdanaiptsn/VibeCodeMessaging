@@ -1,0 +1,10 @@
+# Caddy จะขอใบรับรอง HTTPS จาก Let's Encrypt ให้อัตโนมัติ (ต้องชี้ DNS ของโดเมนมาที่เซิร์ฟเวอร์ก่อน)
+{$DOMAIN} {
+	encode gzip zstd
+	request_body {
+		max_size 10MB
+	}
+	reverse_proxy app:3000 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
