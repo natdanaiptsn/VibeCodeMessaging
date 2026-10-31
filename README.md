@@ -15,7 +15,7 @@
 7. [วิธีตั้งค่า LINE Developers](#วิธีตั้งค่า-line-developers)
 8. [วิธีตั้งค่า Webhook](#วิธีตั้งค่า-webhook)
 9. [คู่มือการใช้งาน](#คู่มือการใช้งาน)
-10. [วิธี Deploy (Production)](#วิธี-deploy-production)
+10. [วิธี Deploy (Production)](#วิธี-deploy-production) — Docker / Node.js / Vercel
 11. [วิธี Backup / Restore Database](#วิธี-backup--restore-database)
 12. [ความปลอดภัย](#ความปลอดภัย)
 13. [การทดสอบ](#การทดสอบ)
@@ -170,7 +170,7 @@ proxy.ts                  Redirect ไปหน้า Login เมื่อไ�
 
 ### ความต้องการ
 
-- Node.js **20.19+** (แนะนำ 22 LTS)
+- Node.js **22.x** (เวอร์ชันที่ทดสอบแล้ว และใช้ใน Docker/Vercel)
 - PostgreSQL **14+** (แนะนำ 16)
 
 ### ขั้นตอน
@@ -244,7 +244,9 @@ npm run admin:create -- --email admin@example.com --name "ผู้ดูแล"
 | `LINE_CHANNEL_SECRET` | | (ไม่บังคับ) ถ้ากำหนด จะใช้แทนค่าที่ตั้งในหน้าเว็บ |
 | `LINE_CHANNEL_ACCESS_TOKEN` | | (ไม่บังคับ) เช่นเดียวกับด้านบน |
 | `LINE_CHANNEL_ID` | | (ไม่บังคับ) สำหรับอ้างอิง |
-| `QUEUE_WORKER_ENABLED` | | เปิด Background Worker (ค่าเริ่มต้น `true`) |
+| `DATABASE_URL_UNPOOLED` | | (ไม่บังคับ) connection แบบ direct สำหรับ migration เมื่อ `DATABASE_URL` เป็น pooler (Neon/Vercel) |
+| `CRON_SECRET` | Vercel | รหัสสำหรับเรียก `/api/cron/maintenance` (Vercel Cron ส่งให้อัตโนมัติ) |
+| `QUEUE_WORKER_ENABLED` | | เปิด Background Worker (ค่าเริ่มต้น `true`, ปิดอัตโนมัติบน Vercel) |
 | `QUEUE_POLL_INTERVAL_MS` | | ความถี่ตรวจคิว (ค่าเริ่มต้น 3000) |
 | `LOG_LEVEL` | | ระดับ Log เริ่มต้น |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | Seed | ผู้ดูแลคนแรก (ไม่ hardcode รหัสผ่านในโค้ด) |
@@ -430,6 +432,47 @@ pm2 start .next/standalone/server.js --name line-oa-manager
 
 ตั้งค่า Nginx ตาม `deploy/nginx.conf.example` และออกใบรับรองด้วย certbot — อย่าลืมกำหนด Environment Variables ให้ process (เช่น ผ่าน `pm2 ecosystem` หรือ systemd `EnvironmentFile=`)
 
+### วิธีที่ 3: Vercel + Neon (ฟรี — เหมาะกับงานเดโม / ส่งงาน)
+
+> ⚠️ Vercel แพ็กเกจฟรี (Hobby) ใช้ได้เฉพาะงาน**ส่วนตัวที่ไม่ใช่เชิงพาณิชย์** — ถ้าจะใช้กับ LINE OA ของธุรกิจจริง ให้ใช้ Vercel Pro หรือวิธีที่ 1/2
+
+ระบบปรับให้ทำงานบน Serverless อัตโนมัติเมื่อตรวจพบ Vercel:
+- Webhook ประมวลผลข้อความทันทีหลังตอบ LINE ด้วย `after()` และรอ retry ที่ถึงเวลาภายใน 45 วินาที
+- ปิด Background Worker แบบวนลูป (ใช้ไม่ได้บน Serverless) และใช้ **Vercel Cron** เรียก `/api/cron/maintenance` วันละครั้งแทน (กู้งานค้าง, ประมวลผลคิว, ลบข้อมูลตามระยะเวลาเก็บ)
+- ตอน build บน **Production** จะรัน `prisma migrate deploy` และ seed ให้อัตโนมัติ (Preview deployment จะไม่แก้ฐานข้อมูล)
+- ถ้าไม่ได้ตั้ง `APP_URL` จะใช้โดเมน `xxx.vercel.app` ของโปรเจกต์อัตโนมัติ
+- Function รันที่ region สิงคโปร์ (`sin1`) ใกล้ผู้ใช้ในไทย
+
+**ขั้นตอน**
+
+1. Push โค้ดขึ้น GitHub แล้วเข้า [vercel.com](https://vercel.com) → **Add New → Project** → เลือก repository (Vercel จะอ่านค่าจาก `vercel.json` เอง ไม่ต้องแก้ Build Command)
+2. สร้างฐานข้อมูล: ในหน้าโปรเจกต์ Vercel → **Storage → Create Database → Neon** (เลือก region Singapore) แล้วเชื่อมกับโปรเจกต์ — Vercel จะเพิ่ม `DATABASE_URL` และ `DATABASE_URL_UNPOOLED` ให้อัตโนมัติ
+   (หรือสมัคร [Neon](https://neon.com) เอง แล้วใส่ connection string แบบ pooled เป็น `DATABASE_URL` และแบบ direct เป็น `DATABASE_URL_UNPOOLED`)
+3. **Settings → Environment Variables** เพิ่มค่าต่อไปนี้ (Environment: Production)
+
+   | ตัวแปร | ค่า |
+   |---|---|
+   | `ENCRYPTION_KEY` | ผลลัพธ์จาก `openssl rand -base64 32` (เก็บสำรองไว้ ห้ามเปลี่ยนภายหลัง) |
+   | `CRON_SECRET` | ผลลัพธ์จาก `openssl rand -hex 24` |
+   | `ADMIN_EMAIL` | อีเมลผู้ดูแลคนแรก |
+   | `ADMIN_PASSWORD` | รหัสผ่านอย่างน้อย 10 ตัวอักษร มีตัวอักษรและตัวเลข (ลบออกได้หลัง deploy ครั้งแรก) |
+   | `APP_URL` | (ไม่บังคับ) ใส่เมื่อใช้โดเมนของตัวเอง เช่น `https://bot.example.com` |
+
+4. กด **Deploy** (ถ้าเพิ่มตัวแปรหลังจาก deploy ไปแล้ว ให้กด **Redeploy**) — ดู Build Logs จะเห็นขั้นตอน migrate และ seed
+5. เปิด `https://<ชื่อโปรเจกต์>.vercel.app` เข้าสู่ระบบ แล้วตั้งค่าในหน้า **LINE OA Settings** และ Webhook ตามหัวข้อ [วิธีตั้งค่า Webhook](#วิธีตั้งค่า-webhook)
+
+**(ไม่บังคับ) ให้ระบบส่งซ้ำ/กู้งานค้างถี่ขึ้น** — Vercel Cron แพ็กเกจฟรีรันได้วันละครั้ง สามารถใช้บริการ Cron ภายนอกที่ฟรี เช่น [cron-job.org](https://cron-job.org) ให้เรียกทุก 5–10 นาที:
+
+```
+GET https://<โดเมน>/api/cron/maintenance
+Authorization: Bearer <CRON_SECRET>
+```
+
+**ข้อจำกัดบน Vercel**
+- อัปโหลดรูปได้ไม่เกิน 4 MB และเปิดไฟล์ที่ลูกค้าส่งผ่านหน้า Inbox ได้ไม่เกิน 4 MB (ข้อจำกัด 4.5 MB ของ Vercel Functions)
+- Rate limit ทำงานแยกตามแต่ละ instance
+- Neon แพ็กเกจฟรีจะหยุดพักเมื่อไม่มีการใช้งาน 5 นาที ข้อความแรกหลังพักอาจช้าขึ้นเล็กน้อย
+
 ### Checklist ก่อนใช้งานจริง
 
 - [ ] `APP_URL` เป็น HTTPS และ Webhook Verify ผ่าน
@@ -506,7 +549,7 @@ pg_restore --clean --if-exists --no-owner -d "postgresql://user:pass@host:5432/l
 | Authorization | สิทธิ์ตามบทบาทตรวจซ้ำที่ทุก Route Handler และทุกหน้า |
 | Credentials | เข้ารหัส AES-256-GCM, ไม่ส่งไป Frontend (ส่งเฉพาะสถานะว่าตั้งค่าแล้ว), รองรับเก็บใน Environment |
 | Reply Token | เข้ารหัส, ไม่อยู่ใน payload, ลบทันทีหลังใช้ และล้างอัตโนมัติหากค้างเกิน 10 นาที |
-| ไฟล์อัปโหลด | JPEG/PNG เท่านั้น, ≤ 5 MB, ตรวจ magic bytes, เสิร์ฟพร้อม `nosniff` + CSP sandbox |
+| ไฟล์อัปโหลด | JPEG/PNG เท่านั้น, ≤ 4 MB, ตรวจ magic bytes, เสิร์ฟพร้อม `nosniff` + CSP sandbox |
 | URL ใน Flex | อนุญาตเฉพาะ `https:`, `line:`, `tel:` (รูปภาพต้อง HTTPS), ห้าม credentials ใน URL, ห้าม localhost/private IP |
 | ReDoS | ตรวจรูปแบบ (star height, backreference, ความยาว) + รัน regex ใน `vm` ที่มี timeout 50ms + จำกัดความยาวข้อความ |
 | Logs | ปิดบังคีย์อ่อนไหว (token/secret/password) อัตโนมัติ, บันทึก LINE Response เฉพาะที่จำเป็น |
@@ -557,6 +600,8 @@ npx tsx scripts/simulate-webhook.ts --text "ราคา" --url http://localhost
 | รูปใน Flex ไม่แสดงใน LINE | URL ต้องเป็น HTTPS ที่ LINE เข้าถึงได้ (ตั้ง `APP_URL` เป็น HTTPS เมื่อใช้รูปที่อัปโหลด) |
 | ถอดรหัส Credentials ไม่ได้ | เปลี่ยน `ENCRYPTION_KEY` — ให้บันทึก Credentials ใหม่ในหน้า LINE OA Settings |
 | ลืมรหัสผ่าน | `npm run admin:create -- --email <อีเมล> --reset` |
+| Vercel: build ล้มเหลวที่ `prisma migrate deploy` | ตรวจว่าเชื่อม Neon แล้ว และมี `DATABASE_URL` (และ `DATABASE_URL_UNPOOLED`) ใน Environment Production |
+| Vercel: Cron ได้ 503 | ยังไม่ได้ตั้ง `CRON_SECRET` แล้ว Redeploy |
 
 ---
 

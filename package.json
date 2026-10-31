@@ -14,7 +14,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "admin:create": "tsx scripts/create-admin.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "vercel-build": "node scripts/vercel-build.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -57,6 +58,6 @@
     "vitest": "^5.0.5"
   },
   "engines": {
-    "node": ">=20.19"
+    "node": "22.x"
   }
 }

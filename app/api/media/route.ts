@@ -5,7 +5,7 @@ import { sha256Hex } from "@/lib/crypto";
 import { appUrl } from "@/lib/env";
 import { auditFromCtx } from "@/lib/audit";
 
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_BYTES = 4 * 1024 * 1024; // 4 MB — ต่ำกว่าขีดจำกัด request body 4.5 MB ของ Vercel Functions
 const ALLOWED: Record<string, { ext: string; magic: (b: Buffer) => boolean }> = {
   "image/jpeg": { ext: "jpg", magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
   "image/png": { ext: "png", magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
@@ -24,14 +24,14 @@ export const GET = route({ permission: "templates:view" }, async () => {
   return items.map((m) => ({ ...m, url: mediaUrl(m.id) }));
 });
 
-/** อัปโหลดรูปภาพสำหรับ Flex Message (JPEG/PNG ไม่เกิน 5 MB, ตรวจสอบ magic bytes) */
+/** อัปโหลดรูปภาพสำหรับ Flex Message (JPEG/PNG ไม่เกิน 4 MB, ตรวจสอบ magic bytes) */
 export const POST = route({ permission: "media:upload", allowMultipart: true, rateLimitPerMinute: 20 }, async (ctx) => {
   const length = Number(ctx.req.headers.get("content-length") ?? "0");
-  if (length > MAX_BYTES + 64 * 1024) throw new ApiError(413, "ไฟล์มีขนาดใหญ่เกิน 5 MB", "PAYLOAD_TOO_LARGE");
+  if (length > MAX_BYTES + 256 * 1024) throw new ApiError(413, "ไฟล์มีขนาดใหญ่เกิน 4 MB", "PAYLOAD_TOO_LARGE");
   const form = await ctx.req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) throw badRequest("กรุณาเลือกไฟล์");
-  if (file.size > MAX_BYTES) throw new ApiError(413, "ไฟล์มีขนาดใหญ่เกิน 5 MB", "PAYLOAD_TOO_LARGE");
+  if (file.size > MAX_BYTES) throw new ApiError(413, "ไฟล์มีขนาดใหญ่เกิน 4 MB", "PAYLOAD_TOO_LARGE");
   const type = ALLOWED[file.type];
   if (!type) throw new ApiError(415, "รองรับเฉพาะไฟล์ JPEG และ PNG", "UNSUPPORTED_MEDIA_TYPE");
   const buffer = Buffer.from(await file.arrayBuffer());

@@ -69,23 +69,61 @@ async function processBatch(batch: { id: string; sourceUserId: string | null }[]
   );
 }
 
-export async function drainQueue(): Promise<number> {
+export type DrainOptions = {
+  /**
+   * รอประมวลผล Event ที่ถูกตั้งเวลาลองใหม่ (retry backoff) ภายในช่วงเวลานี้ด้วย
+   * ใช้บน Serverless (เช่น Vercel) ที่ไม่มี Background Worker คอยวนตรวจคิว
+   */
+  waitForRetriesMs?: number;
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function maybeRecoverStale() {
+  const now = Date.now();
+  if (now - state.lastRecover < 30_000) return;
+  state.lastRecover = now;
+  await recoverStaleEvents();
+}
+
+async function nextRetryDelayMs(): Promise<number | null> {
+  const next = await prisma.webhookEvent.findFirst({
+    where: { status: "PENDING" },
+    orderBy: { availableAt: "asc" },
+    select: { availableAt: true },
+  });
+  return next ? Math.max(0, next.availableAt.getTime() - Date.now()) : null;
+}
+
+/**
+ * ประมวลผล Event ในคิวจนหมด (ถ้ามีการเรียกซ้อนใน instance เดียวกัน รอบที่ทำงานอยู่จะวนรับงานใหม่ให้)
+ * คืนค่า Promise ที่ resolve เมื่อเสร็จ — บน Serverless ต้อง await ภายใน after() เพื่อไม่ให้ถูกหยุดกลางคัน
+ */
+export async function drainQueue(opts: DrainOptions = {}): Promise<number> {
   if (state.running) {
     state.again = true;
     return 0;
   }
   state.running = true;
   let processed = 0;
+  const deadline = Date.now() + (opts.waitForRetriesMs ?? 0);
   try {
-    do {
-      state.again = false;
-      while (true) {
-        const batch = await claimEvents();
-        if (batch.length === 0) break;
-        await processBatch(batch);
-        processed += batch.length;
-      }
-    } while (state.again);
+    await maybeRecoverStale();
+    while (true) {
+      do {
+        state.again = false;
+        while (true) {
+          const batch = await claimEvents();
+          if (batch.length === 0) break;
+          await processBatch(batch);
+          processed += batch.length;
+        }
+      } while (state.again);
+      if (!opts.waitForRetriesMs) break;
+      const delay = await nextRetryDelayMs();
+      if (delay === null || Date.now() + delay > deadline) break;
+      await sleep(delay + 100);
+    }
   } catch (err) {
     logger.error("Queue drain failed", err);
   } finally {
@@ -94,18 +132,23 @@ export async function drainQueue(): Promise<number> {
   return processed;
 }
 
-/** เริ่มประมวลผลทันที (ไม่ block) */
+/** เริ่มประมวลผลทันที (ไม่ block) — ใช้เมื่อมี process ที่รันค้างไว้ (Node server / Docker) */
 export function kickQueue() {
   void drainQueue();
+}
+
+/** งานดูแลระบบสำหรับเรียกจาก Cron (กู้งานค้าง → ประมวลผลคิว → ลบข้อมูลตามระยะเวลาเก็บ) */
+export async function runScheduledJobs() {
+  const recovered = await recoverStaleEvents();
+  state.lastRecover = Date.now();
+  const processed = await drainQueue();
+  const maintenance = await runMaintenance();
+  return { recovered, processed, maintenance };
 }
 
 async function tick() {
   const now = Date.now();
   try {
-    if (now - state.lastRecover > 30_000) {
-      state.lastRecover = now;
-      await recoverStaleEvents();
-    }
     await drainQueue();
     if (now - state.lastMaintenance > MAINTENANCE_INTERVAL_MS) {
       state.lastMaintenance = now;

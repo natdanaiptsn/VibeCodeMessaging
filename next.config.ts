@@ -32,7 +32,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // แอปนี้เป็น Admin Dashboard ที่ต้องยืนยันตัวตนทุกหน้า จึงเรนเดอร์แบบ dynamic ทั้งหมด
   // (ไม่ใช้ Cache Components / Partial Prerendering)
-  output: "standalone",
+  // standalone สำหรับ Docker/Node server — บน Vercel ให้ Vercel จัดการ output เอง
+  output: process.env.VERCEL ? undefined : "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
   serverExternalPackages: ["pg", "@prisma/adapter-pg"],

@@ -1,6 +1,7 @@
 import { NextResponse, after, type NextRequest } from "next/server";
 import { ingestWebhook } from "@/services/line-webhook.service";
-import { kickQueue } from "@/services/queue.service";
+import { drainQueue } from "@/services/queue.service";
+import { isServerless } from "@/lib/runtime";
 import { rateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request";
 import { logger } from "@/lib/logger";
@@ -11,6 +12,8 @@ import { LINE_LIMITS } from "@/lib/line/limits";
  * - ตรวจสอบ X-Line-Signature ด้วย raw body
  * - บันทึก Event ลงคิวแล้วตอบ 200 ทันที จากนั้นประมวลผลใน background
  */
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req) ?? "unknown";
   const rl = rateLimit(`webhook:${ip}`, 2000, 60_000);
@@ -31,7 +34,11 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ message: result.message }, { status: result.status });
     }
-    if (result.inserted > 0) after(() => kickQueue());
+    if (result.inserted > 0) {
+      // ต้อง return Promise ให้ after() รอ — บน Serverless ฟังก์ชันจะถูกหยุดเมื่อ callback จบ
+      // บน Serverless รอ retry ที่ถึงเวลาภายใน 45 วินาทีด้วย เพราะไม่มี Background Worker
+      after(() => drainQueue({ waitForRetriesMs: isServerless() ? 45_000 : 0 }));
+    }
     return NextResponse.json({ ok: true, received: result.received, accepted: result.inserted });
   } catch (err) {
     logger.error("Webhook ingest failed", err);
