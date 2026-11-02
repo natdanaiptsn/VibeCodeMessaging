@@ -78,7 +78,7 @@ export async function getDashboardData(days = 14) {
       displayName: line.displayName,
       pictureUrl: line.pictureUrl,
       basicId: line.basicId,
-      configured: line.hasChannelAccessToken && line.hasChannelSecret,
+      configured: line.canConnect,
     },
     autoReplyEnabled: settings.general.autoReplyEnabled,
     queue: { pending: queue.PENDING + queue.PROCESSING, failed: queue.FAILED },

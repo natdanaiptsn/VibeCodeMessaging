@@ -103,7 +103,7 @@ async function handleEvent(row: WebhookEvent): Promise<{ status: WebhookEventSta
   if (event.mode === "standby") return finishNoReply("Channel อยู่ในโหมด standby");
   const replyToken = safeDecrypt(row.replyTokenEnc);
   if (!replyToken) return finishNoReply("ไม่มี Reply Token");
-  if (!creds.channelAccessToken) return finishNoReply("ยังไม่ได้ตั้งค่า Channel Access Token");
+  if (!creds.channelAccessToken) return finishNoReply(`ยังเชื่อมต่อ LINE ไม่ได้: ${creds.tokenError ?? "ยังไม่ได้ตั้งค่า"}`);
 
   const result = await resolveAutoReply(
     { trigger, text: described.text, customer: { id: customer.id, displayName: customer.displayName, lineUserId: customer.lineUserId } },

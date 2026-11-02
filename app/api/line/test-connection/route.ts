@@ -7,8 +7,9 @@ import { auditFromCtx } from "@/lib/audit";
 export const POST = route({ permission: "line:view", rateLimitPerMinute: 10 }, async (ctx) => {
   const creds = await getLineCredentials();
   if (!creds.channelAccessToken) {
-    await markConnection(creds.accountId, "FAILED", { error: "ยังไม่ได้ตั้งค่า Channel Access Token" });
-    return { ok: false, message: "ยังไม่ได้ตั้งค่า Channel Access Token", account: await getLineAccountPublic() };
+    const reason = creds.tokenError ?? "ยังไม่ได้ตั้งค่า";
+    await markConnection(creds.accountId, "FAILED", { error: reason });
+    return { ok: false, message: `เชื่อมต่อไม่สำเร็จ: ${reason}`, account: await getLineAccountPublic() };
   }
   try {
     const { data } = await lineApi.getBotInfo(creds.channelAccessToken);

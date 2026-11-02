@@ -2,7 +2,7 @@ import { route } from "@/lib/api/handler";
 import { prisma } from "@/lib/prisma";
 import { idParamsSchema } from "@/lib/validation/common";
 import { ApiError, badRequest, notFound } from "@/lib/errors";
-import { getLineCredentials } from "@/services/line-account.service";
+import { getLineCredentials, requireAccessToken } from "@/services/line-account.service";
 import { lineApi } from "@/services/line-messaging.service";
 import { isServerless } from "@/lib/runtime";
 
@@ -18,11 +18,10 @@ export const GET = route<{ id: string }>({ permission: "inbox:view", rateLimitPe
   if (provider?.type === "external") throw badRequest("ไฟล์นี้อยู่บนเซิร์ฟเวอร์ภายนอก");
 
   const creds = await getLineCredentials();
-  if (!creds.channelAccessToken) throw badRequest("ยังไม่ได้ตั้งค่า Channel Access Token");
   // Vercel จำกัด response body ที่ 4.5 MB จึงส่งต่อไฟล์ได้ไม่เกิน 4 MB บน Serverless
   const maxBytes = isServerless() ? 4 * 1024 * 1024 : 25 * 1024 * 1024;
   const tooLarge = () => new ApiError(413, `ไฟล์มีขนาดใหญ่เกิน ${maxBytes / 1024 / 1024} MB (ดูไฟล์นี้ได้ในแอป LINE OA)`, "PAYLOAD_TOO_LARGE");
-  const res = await lineApi.getContent(creds.channelAccessToken, message.lineMessageId);
+  const res = await lineApi.getContent(requireAccessToken(creds), message.lineMessageId);
   const length = Number(res.headers.get("content-length") ?? "0");
   if (length > maxBytes) throw tooLarge();
   const buffer = Buffer.from(await res.arrayBuffer());
