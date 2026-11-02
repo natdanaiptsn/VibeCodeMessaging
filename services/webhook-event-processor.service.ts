@@ -40,8 +40,9 @@ async function handleEvent(row: WebhookEvent): Promise<{ status: WebhookEventSta
   const described = describeEvent(event);
   if (!described) return { status: "SKIPPED", note: `ไม่รองรับ event ประเภท ${event.type}` };
 
-  const [settings, creds] = await Promise.all([getSettings(), getLineCredentials()]);
-  let customer = await upsertCustomer(row.lineAccountId, userId);
+  // ทุกอย่างใช้ของโปรเจกต์ที่ Event นี้เข้ามา (กฎ, การตั้งค่า, token)
+  const [settings, creds] = await Promise.all([getSettings(row.projectId), getLineCredentials(row.projectId)]);
+  let customer = await upsertCustomer(row.projectId, userId);
   const timestamp = new Date(event.timestamp);
 
   if (event.type === "follow") {
@@ -69,7 +70,7 @@ async function handleEvent(row: WebhookEvent): Promise<{ status: WebhookEventSta
     ? await prisma.message.update({ where: { id: existingMessage.id }, data: { status: "PROCESSING" } })
     : await prisma.message.create({
         data: {
-          lineAccountId: row.lineAccountId,
+          projectId: row.projectId,
           customerId: customer.id,
           webhookEventId: row.id,
           direction: "INBOUND",
@@ -106,7 +107,7 @@ async function handleEvent(row: WebhookEvent): Promise<{ status: WebhookEventSta
   if (!creds.channelAccessToken) return finishNoReply(`ยังเชื่อมต่อ LINE ไม่ได้: ${creds.tokenError ?? "ยังไม่ได้ตั้งค่า"}`);
 
   const result = await resolveAutoReply(
-    { trigger, text: described.text, customer: { id: customer.id, displayName: customer.displayName, lineUserId: customer.lineUserId } },
+    { projectId: row.projectId, trigger, text: described.text, customer: { id: customer.id, displayName: customer.displayName, lineUserId: customer.lineUserId } },
     settings,
   );
 

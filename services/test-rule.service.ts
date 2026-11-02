@@ -25,9 +25,9 @@ export const TEST_FLEX_KEYWORDS = ["testflex", "test flex"];
 export type TestRuleKey = "text" | "flex";
 type RuleStatus = { id: string; isActive: boolean } | null;
 
-export async function getTestRuleStatus(): Promise<Record<TestRuleKey, RuleStatus>> {
+export async function getTestRuleStatus(projectId: string): Promise<Record<TestRuleKey, RuleStatus>> {
   const rules = await prisma.replyRule.findMany({
-    where: { name: { in: [TEST_RULE_NAME, TEST_FLEX_RULE_NAME] } },
+    where: { projectId, name: { in: [TEST_RULE_NAME, TEST_FLEX_RULE_NAME] } },
     select: { id: true, name: true, isActive: true },
   });
   const pick = (name: string) => {
@@ -38,6 +38,7 @@ export async function getTestRuleStatus(): Promise<Record<TestRuleKey, RuleStatu
 }
 
 async function upsertRule(params: {
+  projectId: string;
   userId: string;
   name: string;
   description: string;
@@ -59,7 +60,7 @@ async function upsertRule(params: {
     flexTemplateId: params.flexTemplateId,
     updatedById: params.userId,
   };
-  const existing = await prisma.replyRule.findFirst({ where: { name: params.name }, select: { id: true } });
+  const existing = await prisma.replyRule.findFirst({ where: { projectId: params.projectId, name: params.name }, select: { id: true } });
   if (existing) {
     await prisma.$transaction([
       prisma.replyKeyword.deleteMany({ where: { ruleId: existing.id } }),
@@ -68,22 +69,22 @@ async function upsertRule(params: {
     return { created: false, ruleId: existing.id };
   }
   const rule = await prisma.replyRule.create({
-    data: { ...data, name: params.name, description: params.description, createdById: params.userId, keywords: { create: keywords } },
+    data: { ...data, projectId: params.projectId, name: params.name, description: params.description, createdById: params.userId, keywords: { create: keywords } },
     select: { id: true },
   });
   return { created: true, ruleId: rule.id };
 }
 
 /** สร้างกฎทดสอบทั้ง 2 แบบ (หรือเปิดใช้งาน/ซ่อมกฎเดิม) — เรียกซ้ำได้โดยไม่สร้างซ้ำ */
-export async function ensureTestRules(userId: string) {
+export async function ensureTestRules(projectId: string, userId: string) {
   const textTemplate =
-    (await prisma.replyTemplate.findFirst({ where: { name: TEST_TEMPLATE_NAME } })) ??
+    (await prisma.replyTemplate.findFirst({ where: { projectId, name: TEST_TEMPLATE_NAME } })) ??
     (await prisma.replyTemplate.create({
-      data: { name: TEST_TEMPLATE_NAME, content: TEST_REPLY, description: "ใช้กับกฎทดสอบระบบ", createdById: userId },
+      data: { projectId, name: TEST_TEMPLATE_NAME, content: TEST_REPLY, description: "ใช้กับกฎทดสอบระบบ", createdById: userId },
     }));
 
   // ใช้ Flex "TestFlex" เดิมถ้ายังถูกต้อง ไม่เช่นนั้นสร้าง/แก้ให้เป็นแบบมาตรฐาน
-  const existingFlex = await prisma.flexTemplate.findFirst({ where: { name: TEST_FLEX_TEMPLATE_NAME } });
+  const existingFlex = await prisma.flexTemplate.findFirst({ where: { projectId, name: TEST_FLEX_TEMPLATE_NAME } });
   const flexValid = existingFlex ? validateFlexMessage(existingFlex.altText, existingFlex.contents).valid : false;
   const flexTemplate =
     existingFlex && flexValid
@@ -95,6 +96,7 @@ export async function ensureTestRules(userId: string) {
           })
         : await prisma.flexTemplate.create({
             data: {
+              projectId,
               name: TEST_FLEX_TEMPLATE_NAME,
               description: "Flex Message สำหรับทดสอบระบบ (ตอบเมื่อพิมพ์ TestFlex)",
               altText: TEST_FLEX_ALT_TEXT,
@@ -105,6 +107,7 @@ export async function ensureTestRules(userId: string) {
           });
 
   const text = await upsertRule({
+    projectId,
     userId,
     name: TEST_RULE_NAME,
     description: "สร้างจากหน้า LINE OA Settings เพื่อทดสอบการเชื่อมต่อ — ลบหรือปิดได้เมื่อทดสอบเสร็จ",
@@ -114,6 +117,7 @@ export async function ensureTestRules(userId: string) {
     flexTemplateId: null,
   });
   const flex = await upsertRule({
+    projectId,
     userId,
     name: TEST_FLEX_RULE_NAME,
     description: "สร้างจากหน้า LINE OA Settings เพื่อทดสอบการตอบกลับด้วย Flex Message — ลบหรือปิดได้เมื่อทดสอบเสร็จ",
@@ -122,6 +126,6 @@ export async function ensureTestRules(userId: string) {
     textTemplateId: null,
     flexTemplateId: flexTemplate.id,
   });
-  invalidateRuleCache();
+  invalidateRuleCache(projectId);
   return { text, flex };
 }

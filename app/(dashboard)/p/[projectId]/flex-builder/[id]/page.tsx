@@ -7,12 +7,12 @@ import { FlexBuilder } from "@/components/flex-builder/flex-builder";
 
 export const metadata: Metadata = { title: "แก้ไข Flex Message" };
 
-export default async function EditFlexPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditFlexPage({ params }: { params: Promise<{ projectId: string; id: string }> }) {
   await requirePageUser("templates:view");
-  const { id } = await params;
+  const { projectId, id } = await params;
   if (!uuidSchema.safeParse(id).success) notFound();
-  const t = await prisma.flexTemplate.findUnique({
-    where: { id },
+  const t = await prisma.flexTemplate.findFirst({
+    where: { id, projectId },
     select: { id: true, name: true, description: true, altText: true, contents: true },
   });
   if (!t) notFound();

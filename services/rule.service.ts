@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { normalizeText } from "@/lib/auto-reply/normalize";
-import { badRequest } from "@/lib/errors";
+import { badRequest, notFound } from "@/lib/errors";
 import { KEYWORD_TRIGGERS, type RuleInput } from "@/lib/validation/rules";
 import { invalidateRuleCache } from "@/services/auto-reply-engine.service";
 import type { Prisma, RuleTrigger } from "@/lib/generated/prisma/client";
@@ -25,12 +25,12 @@ function keywordRows(input: RuleInput) {
   return rows;
 }
 
-async function assertTemplates(input: RuleInput) {
+async function assertTemplates(projectId: string, input: RuleInput) {
   if (input.replyType === "TEXT") {
-    const t = await prisma.replyTemplate.findUnique({ where: { id: input.textTemplateId! }, select: { id: true } });
+    const t = await prisma.replyTemplate.findFirst({ where: { id: input.textTemplateId!, projectId }, select: { id: true } });
     if (!t) throw badRequest("ไม่พบข้อความตอบกลับที่เลือก", [{ path: "textTemplateId", message: "ไม่พบข้อความ" }]);
   } else {
-    const f = await prisma.flexTemplate.findUnique({ where: { id: input.flexTemplateId! }, select: { id: true } });
+    const f = await prisma.flexTemplate.findFirst({ where: { id: input.flexTemplateId!, projectId }, select: { id: true } });
     if (!f) throw badRequest("ไม่พบ Flex Message ที่เลือก", [{ path: "flexTemplateId", message: "ไม่พบ Flex Message" }]);
   }
 }
@@ -51,9 +51,10 @@ function ruleData(input: RuleInput) {
   };
 }
 
-export async function listRules(q: { search?: string; trigger?: RuleTrigger; status?: "active" | "inactive" }) {
+export async function listRules(projectId: string, q: { search?: string; trigger?: RuleTrigger; status?: "active" | "inactive" }) {
   return prisma.replyRule.findMany({
     where: {
+      projectId,
       ...(q.search
         ? {
             OR: [
@@ -71,14 +72,20 @@ export async function listRules(q: { search?: string; trigger?: RuleTrigger; sta
   });
 }
 
-export async function getRule(id: string) {
-  return prisma.replyRule.findUnique({ where: { id }, include: ruleInclude });
+export async function getRule(projectId: string, id: string) {
+  return prisma.replyRule.findFirst({ where: { id, projectId }, include: ruleInclude });
 }
 
-export async function createRule(input: RuleInput, userId: string) {
-  await assertTemplates(input);
+async function assertRuleInProject(projectId: string, id: string) {
+  const found = await prisma.replyRule.findFirst({ where: { id, projectId }, select: { id: true } });
+  if (!found) throw notFound("ไม่พบกฎตอบกลับ");
+}
+
+export async function createRule(projectId: string, input: RuleInput, userId: string) {
+  await assertTemplates(projectId, input);
   const rule = await prisma.replyRule.create({
     data: {
+      projectId,
       ...ruleData(input),
       createdById: userId,
       updatedById: userId,
@@ -86,12 +93,13 @@ export async function createRule(input: RuleInput, userId: string) {
     },
     include: ruleInclude,
   });
-  invalidateRuleCache();
+  invalidateRuleCache(projectId);
   return rule;
 }
 
-export async function updateRule(id: string, input: RuleInput, userId: string) {
-  await assertTemplates(input);
+export async function updateRule(projectId: string, id: string, input: RuleInput, userId: string) {
+  await assertRuleInProject(projectId, id);
+  await assertTemplates(projectId, input);
   const rule = await prisma.$transaction(async (tx) => {
     await tx.replyKeyword.deleteMany({ where: { ruleId: id } });
     return tx.replyRule.update({
@@ -100,17 +108,19 @@ export async function updateRule(id: string, input: RuleInput, userId: string) {
       include: ruleInclude,
     });
   });
-  invalidateRuleCache();
+  invalidateRuleCache(projectId);
   return rule;
 }
 
-export async function patchRule(id: string, data: { isActive?: boolean; priority?: number }, userId: string) {
+export async function patchRule(projectId: string, id: string, data: { isActive?: boolean; priority?: number }, userId: string) {
+  await assertRuleInProject(projectId, id);
   const rule = await prisma.replyRule.update({ where: { id }, data: { ...data, updatedById: userId }, include: ruleInclude });
-  invalidateRuleCache();
+  invalidateRuleCache(projectId);
   return rule;
 }
 
-export async function deleteRule(id: string) {
+export async function deleteRule(projectId: string, id: string) {
+  await assertRuleInProject(projectId, id);
   await prisma.replyRule.delete({ where: { id } });
-  invalidateRuleCache();
+  invalidateRuleCache(projectId);
 }

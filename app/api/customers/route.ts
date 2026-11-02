@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { route, searchParamsObject } from "@/lib/api/handler";
+import { projectRoute, searchParamsObject } from "@/lib/api/handler";
 import { listCustomers } from "@/services/customer.service";
 import { emptyToUndefined, paginationSchema, searchSchema } from "@/lib/validation/common";
 
@@ -8,6 +8,6 @@ const querySchema = paginationSchema.extend({
   following: z.preprocess(emptyToUndefined, z.enum(["all", "following", "unfollowed"]).default("all")),
 });
 
-export const GET = route({ permission: "customers:view" }, async ({ req }) => {
-  return listCustomers(querySchema.parse(searchParamsObject(req)));
+export const GET = projectRoute({ permission: "customers:view" }, async ({ req, project }) => {
+  return listCustomers(project.id, querySchema.parse(searchParamsObject(req)));
 });

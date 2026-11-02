@@ -157,11 +157,16 @@ model Session {
   @@index([expiresAt])
 }
 
-// ───────────────────────────── LINE ─────────────────────────────
+// ───────────────────────────── Project / LINE ─────────────────────────────
 
-model LineAccount {
+/// โปรเจกต์ — 1 โปรเจกต์เชื่อมต่อ LINE OA ได้ 1 บัญชี
+/// (ใช้ตารางเดิมชื่อ "LineAccount" เพื่อให้ข้อมูลลูกค้า/ข้อความเดิมย้ายมาเป็นโปรเจกต์แรกได้ทันที)
+model Project {
   id                    String           @id @default(uuid()) @db.Uuid
   name                  String
+  description           String?
+  /// การตั้งค่าเฉพาะโปรเจกต์ { general, defaultReply } (ค่าที่ไม่มีใช้ค่าเริ่มต้น)
+  settings              Json?
   channelId             String?
   botUserId             String?          @unique // destination ใน Webhook
   basicId               String?
@@ -170,7 +175,8 @@ model LineAccount {
   channelSecretEnc      String? // เข้ารหัส AES-256-GCM
   channelAccessTokenEnc String? // เข้ารหัส AES-256-GCM
   credentialsUpdatedAt  DateTime?        @db.Timestamptz(3)
-  isDefault             Boolean          @default(true)
+  /// โปรเจกต์หลัก: รับ Webhook จาก URL เดิม /api/webhook/line และใช้ LINE_* จาก Environment Variable ได้
+  isDefault             Boolean          @default(false)
   isActive              Boolean          @default(true)
   connectionStatus      ConnectionStatus @default(UNKNOWN)
   connectionError       String?
@@ -183,36 +189,41 @@ model LineAccount {
   messages      Message[]
   webhookEvents WebhookEvent[]
   replyLogs     ReplyLog[]
+  rules         ReplyRule[]
+  textTemplates ReplyTemplate[]
+  flexTemplates FlexTemplate[]
+  auditLogs     AuditLog[]
 
   @@index([isDefault, isActive])
+  @@map("LineAccount")
 }
 
 model Customer {
-  id               String    @id @default(uuid(7)) @db.Uuid
-  lineAccountId    String    @db.Uuid
-  lineUserId       String
-  displayName      String?
-  pictureUrl       String?
-  statusMessage    String?
-  language         String?
-  isFollowing      Boolean   @default(true)
-  followedAt       DateTime? @db.Timestamptz(3)
-  unfollowedAt     DateTime? @db.Timestamptz(3)
-  lastMessageAt    DateTime? @db.Timestamptz(3)
-  lastMessageText  String?
-  lastMessageType  MessageType?
-  messageCount     Int       @default(0)
-  profileSyncedAt  DateTime? @db.Timestamptz(3)
-  note             String?
-  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+  id              String       @id @default(uuid(7)) @db.Uuid
+  projectId       String       @map("lineAccountId") @db.Uuid
+  lineUserId      String
+  displayName     String?
+  pictureUrl      String?
+  statusMessage   String?
+  language        String?
+  isFollowing     Boolean      @default(true)
+  followedAt      DateTime?    @db.Timestamptz(3)
+  unfollowedAt    DateTime?    @db.Timestamptz(3)
+  lastMessageAt   DateTime?    @db.Timestamptz(3)
+  lastMessageText String?
+  lastMessageType MessageType?
+  messageCount    Int          @default(0)
+  profileSyncedAt DateTime?    @db.Timestamptz(3)
+  note            String?
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
 
-  lineAccount LineAccount @relation(fields: [lineAccountId], references: [id], onDelete: Cascade)
-  messages    Message[]
-  replyLogs   ReplyLog[]
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  replyLogs ReplyLog[]
 
-  @@unique([lineAccountId, lineUserId])
-  @@index([lineAccountId, lastMessageAt(sort: Desc)])
+  @@unique([projectId, lineUserId])
+  @@index([projectId, lastMessageAt(sort: Desc)])
   @@index([displayName])
   @@index([lineUserId])
   @@index([isFollowing])
@@ -220,7 +231,7 @@ model Customer {
 
 model WebhookEvent {
   id             String             @id @default(uuid(7)) @db.Uuid
-  lineAccountId  String             @db.Uuid
+  projectId      String             @map("lineAccountId") @db.Uuid
   webhookEventId String             @unique // ใช้ป้องกัน Event ซ้ำ / Redelivery
   type           String
   mode           String?
@@ -239,9 +250,9 @@ model WebhookEvent {
   createdAt      DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime           @updatedAt @db.Timestamptz(3)
 
-  lineAccount LineAccount @relation(fields: [lineAccountId], references: [id], onDelete: Cascade)
-  message     Message?
-  replyLog    ReplyLog?
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  message  Message?
+  replyLog ReplyLog?
 
   @@index([status, availableAt])
   @@index([sourceUserId])
@@ -250,7 +261,7 @@ model WebhookEvent {
 
 model Message {
   id             String           @id @default(uuid(7)) @db.Uuid
-  lineAccountId  String           @db.Uuid
+  projectId      String           @map("lineAccountId") @db.Uuid
   customerId     String           @db.Uuid
   webhookEventId String?          @unique @db.Uuid
   direction      MessageDirection
@@ -265,7 +276,7 @@ model Message {
   createdAt      DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
 
-  lineAccount  LineAccount   @relation(fields: [lineAccountId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
   webhookEvent WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
   sentBy       User?         @relation("MessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
@@ -273,7 +284,7 @@ model Message {
   sourceOf     ReplyLog[]    @relation("ReplyLogSource")
 
   @@index([customerId, timestamp(sort: Desc)])
-  @@index([lineAccountId, timestamp(sort: Desc)])
+  @@index([projectId, timestamp(sort: Desc)])
   @@index([direction, timestamp])
   @@index([type])
   @@index([status])
@@ -284,6 +295,7 @@ model Message {
 
 model ReplyTemplate {
   id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @db.Uuid
   name        String
   description String?
   content     String
@@ -291,15 +303,17 @@ model ReplyTemplate {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User?       @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   rules     ReplyRule[]
 
-  @@index([name])
-  @@index([updatedAt])
+  @@index([projectId, name])
+  @@index([projectId, updatedAt])
 }
 
 model FlexTemplate {
   id            String   @id @default(uuid()) @db.Uuid
+  projectId     String   @db.Uuid
   name          String
   description   String?
   altText       String
@@ -309,15 +323,17 @@ model FlexTemplate {
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User?       @relation("FlexCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   rules     ReplyRule[]
 
-  @@index([name])
-  @@index([updatedAt])
+  @@index([projectId, name])
+  @@index([projectId, updatedAt])
 }
 
 model ReplyRule {
   id             String           @id @default(uuid()) @db.Uuid
+  projectId      String           @db.Uuid
   name           String
   description    String?
   isActive       Boolean          @default(true)
@@ -336,6 +352,7 @@ model ReplyRule {
   createdAt      DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
 
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   textTemplate ReplyTemplate? @relation(fields: [textTemplateId], references: [id], onDelete: Restrict)
   flexTemplate FlexTemplate?  @relation(fields: [flexTemplateId], references: [id], onDelete: Restrict)
   createdBy    User?          @relation("RuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -343,7 +360,7 @@ model ReplyRule {
   keywords     ReplyKeyword[]
   replyLogs    ReplyLog[]
 
-  @@index([isActive, triggerType, priority(sort: Desc)])
+  @@index([projectId, isActive, triggerType, priority(sort: Desc)])
   @@index([textTemplateId])
   @@index([flexTemplateId])
 }
@@ -363,34 +380,34 @@ model ReplyKeyword {
 }
 
 model ReplyLog {
-  id                String           @id @default(uuid(7)) @db.Uuid
-  lineAccountId     String?          @db.Uuid
-  customerId        String?          @db.Uuid
-  sourceMessageId   String?          @db.Uuid
-  webhookEventId    String?          @unique @db.Uuid // 1 Event = ตอบกลับได้ครั้งเดียว
-  ruleId            String?          @db.Uuid
-  ruleName          String? // snapshot ชื่อกฎ ณ เวลาที่ตอบ
-  matchedRules      Json? // [{ id, name, keyword }]
-  matchedKeyword    String?
-  source            ReplySource
-  method            ReplyMethod
-  replyType         ReplyContentType
-  status            ReplyStatus      @default(PENDING)
-  requestMessages   Json? // ข้อความที่ส่ง (ไม่มี token)
-  responseStatus    Int?
-  responseBody      Json? // เฉพาะข้อมูลที่จำเป็น
-  lineRequestId     String?
-  retryKey          String?          @unique // X-Line-Retry-Key ป้องกันส่งซ้ำ
-  errorMessage      String?
-  attempts          Int              @default(0)
-  triggeredById     String?          @db.Uuid
-  retryOfId         String?          @db.Uuid
-  startedAt         DateTime?        @db.Timestamptz(3)
-  completedAt       DateTime?        @db.Timestamptz(3)
-  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+  id              String           @id @default(uuid(7)) @db.Uuid
+  projectId       String?          @map("lineAccountId") @db.Uuid
+  customerId      String?          @db.Uuid
+  sourceMessageId String?          @db.Uuid
+  webhookEventId  String?          @unique @db.Uuid // 1 Event = ตอบกลับได้ครั้งเดียว
+  ruleId          String?          @db.Uuid
+  ruleName        String? // snapshot ชื่อกฎ ณ เวลาที่ตอบ
+  matchedRules    Json? // [{ id, name, keyword }]
+  matchedKeyword  String?
+  source          ReplySource
+  method          ReplyMethod
+  replyType       ReplyContentType
+  status          ReplyStatus      @default(PENDING)
+  requestMessages Json? // ข้อความที่ส่ง (ไม่มี token)
+  responseStatus  Int?
+  responseBody    Json? // เฉพาะข้อมูลที่จำเป็น
+  lineRequestId   String?
+  retryKey        String?          @unique // X-Line-Retry-Key ป้องกันส่งซ้ำ
+  errorMessage    String?
+  attempts        Int              @default(0)
+  triggeredById   String?          @db.Uuid
+  retryOfId       String?          @db.Uuid
+  startedAt       DateTime?        @db.Timestamptz(3)
+  completedAt     DateTime?        @db.Timestamptz(3)
+  createdAt       DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(3)
 
-  lineAccount   LineAccount?  @relation(fields: [lineAccountId], references: [id], onDelete: SetNull)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   sourceMessage Message?      @relation("ReplyLogSource", fields: [sourceMessageId], references: [id], onDelete: SetNull)
   webhookEvent  WebhookEvent? @relation(fields: [webhookEventId], references: [id], onDelete: SetNull)
@@ -420,6 +437,7 @@ model SystemSetting {
 
 model AuditLog {
   id         String   @id @default(uuid(7)) @db.Uuid
+  projectId  String?  @db.Uuid
   userId     String?  @db.Uuid
   action     String // เช่น rule.create, settings.update
   entityType String
@@ -431,9 +449,11 @@ model AuditLog {
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
+  @@index([projectId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([userId])
   @@index([action])

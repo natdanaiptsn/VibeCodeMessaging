@@ -2,10 +2,10 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { env, appUrl } from "@/lib/env";
 import { encrypt, safeDecrypt, sha256Hex } from "@/lib/crypto";
-import { badRequest } from "@/lib/errors";
+import { badRequest, conflict, notFound } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { lineApi, describeLineError } from "@/services/line-messaging.service";
-import type { ConnectionStatus } from "@/lib/generated/prisma/client";
+import type { ConnectionStatus, Project } from "@/lib/generated/prisma/client";
 
 export type CredentialSource = "env" | "database" | null;
 
@@ -42,16 +42,33 @@ async function getStatelessToken(channelId: string, channelSecret: string): Prom
   return accessToken;
 }
 
-/** บัญชี LINE OA หลัก (สร้างอัตโนมัติหากยังไม่มี) */
-export async function getDefaultLineAccount() {
-  const existing = await prisma.lineAccount.findFirst({
-    where: { isDefault: true, isActive: true },
-    orderBy: { createdAt: "asc" },
-  });
+/**
+ * โปรเจกต์หลัก — รับ Webhook จาก URL เดิม (/api/webhook/line) และใช้ LINE_* จาก Environment Variable ได้
+ * (สร้างอัตโนมัติหากยังไม่มีโปรเจกต์เลย)
+ */
+export async function getDefaultProject(): Promise<Project> {
+  const existing = await prisma.project.findFirst({ where: { isDefault: true }, orderBy: { createdAt: "asc" } });
   if (existing) return existing;
-  const any = await prisma.lineAccount.findFirst({ orderBy: { createdAt: "asc" } });
-  if (any) return prisma.lineAccount.update({ where: { id: any.id }, data: { isDefault: true, isActive: true } });
-  return prisma.lineAccount.create({ data: { name: "LINE OA หลัก", isDefault: true } });
+  const any = await prisma.project.findFirst({ orderBy: { createdAt: "asc" } });
+  if (any) return prisma.project.update({ where: { id: any.id }, data: { isDefault: true } });
+  return prisma.project.create({ data: { name: "โปรเจกต์แรก", isDefault: true } });
+}
+
+export async function getProjectOrThrow(projectId: string): Promise<Project> {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw notFound("ไม่พบโปรเจกต์");
+  return project;
+}
+
+/** ค่า LINE_* ใน Environment Variable ใช้ได้เฉพาะโปรเจกต์หลัก (โปรเจกต์อื่นกรอกในหน้า LINE OA Settings) */
+function envCredentials(project: Project) {
+  if (!project.isDefault) return { id: null, secret: null, token: null };
+  const e = env();
+  return {
+    id: e.LINE_CHANNEL_ID?.trim() || null,
+    secret: e.LINE_CHANNEL_SECRET?.trim() || null,
+    token: e.LINE_CHANNEL_ACCESS_TOKEN?.trim() || null,
+  };
 }
 
 /**
@@ -60,15 +77,18 @@ export async function getDefaultLineAccount() {
  * - ถ้าไม่มี token แบบ long-lived แต่มี Channel ID + Channel secret ระบบจะขอ token จาก LINE ให้อัตโนมัติ
  * @param opts.includeToken false = ไม่ต้องขอ token (เช่น ตอนตรวจลายเซ็น Webhook ที่ใช้แค่ secret)
  */
-export async function getLineCredentials(opts: { includeToken?: boolean } = {}): Promise<LineCredentials> {
+export async function getLineCredentials(
+  projectOrId: string | Project,
+  opts: { includeToken?: boolean } = {},
+): Promise<LineCredentials> {
   const includeToken = opts.includeToken ?? true;
-  const account = await getDefaultLineAccount();
-  const e = env();
-  const envSecret = e.LINE_CHANNEL_SECRET?.trim() || null;
-  const envToken = e.LINE_CHANNEL_ACCESS_TOKEN?.trim() || null;
+  const account = typeof projectOrId === "string" ? await getProjectOrThrow(projectOrId) : projectOrId;
+  const fromEnv = envCredentials(account);
+  const envSecret = fromEnv.secret;
+  const envToken = fromEnv.token;
   const dbSecret = safeDecrypt(account.channelSecretEnc);
   const dbToken = safeDecrypt(account.channelAccessTokenEnc);
-  const channelId = e.LINE_CHANNEL_ID?.trim() || account.channelId || null;
+  const channelId = fromEnv.id || account.channelId || null;
   const channelSecret = envSecret ?? dbSecret;
   const longLived = envToken ?? dbToken;
 
@@ -89,7 +109,7 @@ export async function getLineCredentials(opts: { includeToken?: boolean } = {}):
         tokenSource = "stateless";
       } catch (err) {
         tokenError = `ขอ Access token จาก LINE ไม่สำเร็จ: ${describeLineError(err)} — ตรวจสอบว่า Channel ID และ Channel secret มาจาก channel เดียวกัน`;
-        logger.warn("Failed to issue stateless channel access token", { error: (err as Error).message });
+        logger.warn("Failed to issue stateless channel access token", { projectId: account.id, error: (err as Error).message });
       }
     } else {
       tokenSource = "stateless";
@@ -113,28 +133,35 @@ export function requireAccessToken(creds: LineCredentials): string {
   throw badRequest(`ยังเชื่อมต่อ LINE ไม่ได้: ${creds.tokenError ?? "ยังไม่ได้ตั้งค่า"} (ตั้งค่าที่หน้า LINE OA Settings)`);
 }
 
-export function webhookUrl(): string | null {
+/** Webhook URL ของโปรเจกต์ (แต่ละโปรเจกต์มี URL ของตัวเอง) */
+export function webhookUrl(projectId: string): string | null {
+  const base = appUrl();
+  return base ? `${base}/api/webhook/line/${projectId}` : null;
+}
+
+/** URL เดิมก่อนมีระบบโปรเจกต์ — ยังใช้ได้กับโปรเจกต์หลัก */
+export function legacyWebhookUrl(): string | null {
   const base = appUrl();
   return base ? `${base}/api/webhook/line` : null;
 }
 
 /** ข้อมูลที่ปลอดภัยสำหรับแสดงผลบน Frontend (ไม่มี Token/Secret) */
-export async function getLineAccountPublic() {
-  const account = await getDefaultLineAccount();
+export async function getLineAccountPublic(projectId: string) {
+  const account = await getProjectOrThrow(projectId);
   const [creds, lastInbound] = await Promise.all([
-    getLineCredentials({ includeToken: false }),
+    getLineCredentials(account, { includeToken: false }),
     prisma.message.findFirst({
-      where: { direction: "INBOUND", lineAccountId: account.id, type: { notIn: ["FOLLOW", "UNFOLLOW"] } },
+      where: { direction: "INBOUND", projectId: account.id, type: { notIn: ["FOLLOW", "UNFOLLOW"] } },
       orderBy: { timestamp: "desc" },
       select: { timestamp: true, text: true, type: true },
     }),
   ]);
-  const e = env();
   return {
     id: account.id,
     name: account.name,
+    isDefault: account.isDefault,
     channelId: creds.channelId,
-    channelIdSource: (e.LINE_CHANNEL_ID?.trim() ? "env" : account.channelId ? "database" : null) as CredentialSource,
+    channelIdSource: (envCredentials(account).id ? "env" : account.channelId ? "database" : null) as CredentialSource,
     botUserId: account.botUserId,
     basicId: account.basicId,
     displayName: account.displayName,
@@ -151,21 +178,24 @@ export async function getLineAccountPublic() {
     connectionError: account.connectionError,
     lastVerifiedAt: account.lastVerifiedAt,
     lastWebhookAt: account.lastWebhookAt,
-    webhookUrl: webhookUrl(),
+    webhookUrl: webhookUrl(account.id),
+    /** โปรเจกต์หลักรับ Webhook จาก URL เดิมได้ด้วย */
+    legacyWebhookUrl: account.isDefault ? legacyWebhookUrl() : null,
     /** ข้อความล่าสุดที่ลูกค้าส่งเข้ามา (ใช้ยืนยันว่าเชื่อมต่อใช้งานได้จริง) */
     lastInbound: lastInbound ? { at: lastInbound.timestamp, text: lastInbound.text, type: lastInbound.type } : null,
   };
 }
 
-export async function saveLineCredentials(input: {
-  name?: string;
-  channelId?: string;
-  channelSecret?: string;
-  channelAccessToken?: string;
-}) {
-  const account = await getDefaultLineAccount();
+export async function saveLineCredentials(
+  projectId: string,
+  input: {
+    channelId?: string;
+    channelSecret?: string;
+    channelAccessToken?: string;
+  },
+) {
+  const account = await getProjectOrThrow(projectId);
   const data: Record<string, unknown> = {};
-  if (input.name) data.name = input.name;
   if (input.channelId !== undefined) data.channelId = input.channelId || null;
   if (input.channelSecret) data.channelSecretEnc = encrypt(input.channelSecret);
   if (input.channelAccessToken) data.channelAccessTokenEnc = encrypt(input.channelAccessToken);
@@ -174,21 +204,31 @@ export async function saveLineCredentials(input: {
     data.connectionStatus = "UNKNOWN";
     data.connectionError = null;
   }
-  return prisma.lineAccount.update({ where: { id: account.id }, data });
+  return prisma.project.update({ where: { id: account.id }, data });
 }
 
-export async function clearLineCredentials(which: "secret" | "token" | "all") {
-  const account = await getDefaultLineAccount();
-  return prisma.lineAccount.update({
+export async function clearLineCredentials(projectId: string, which: "secret" | "token" | "all") {
+  const account = await getProjectOrThrow(projectId);
+  return prisma.project.update({
     where: { id: account.id },
     data: {
       ...(which !== "token" ? { channelSecretEnc: null } : {}),
       ...(which !== "secret" ? { channelAccessTokenEnc: null } : {}),
-      ...(which === "all" ? { channelId: null } : {}),
+      ...(which === "all" ? { channelId: null, botUserId: null } : {}),
       credentialsUpdatedAt: new Date(),
       connectionStatus: "UNKNOWN",
     },
   });
+}
+
+/**
+ * 1 LINE OA ใช้ได้กับ 1 โปรเจกต์ — ถ้าบัญชีนี้ถูกเชื่อมกับโปรเจกต์อื่นอยู่แล้วจะโยน 409 พร้อมชื่อโปรเจกต์นั้น
+ */
+export async function assertBotNotUsedElsewhere(projectId: string, botUserId: string) {
+  const other = await prisma.project.findFirst({ where: { botUserId, id: { not: projectId } }, select: { name: true } });
+  if (other) {
+    throw conflict(`LINE OA นี้เชื่อมต่อกับโปรเจกต์ “${other.name}” อยู่แล้ว — 1 LINE OA ใช้ได้กับ 1 โปรเจกต์ (ยกเลิกการเชื่อมต่อที่โปรเจกต์นั้นก่อน)`);
+  }
 }
 
 export async function markConnection(
@@ -196,7 +236,8 @@ export async function markConnection(
   status: ConnectionStatus,
   info?: { error?: string | null; botUserId?: string; basicId?: string; displayName?: string; pictureUrl?: string | null },
 ) {
-  return prisma.lineAccount.update({
+  if (info?.botUserId) await assertBotNotUsedElsewhere(accountId, info.botUserId);
+  return prisma.project.update({
     where: { id: accountId },
     data: {
       connectionStatus: status,

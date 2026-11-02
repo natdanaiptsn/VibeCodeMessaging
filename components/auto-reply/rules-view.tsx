@@ -22,7 +22,7 @@ import { LineTextBubble } from "@/components/text-messages/line-text-bubble";
 import { ChatBackdrop, FlexPreview } from "@/components/flex/flex-preview";
 import { apiFetch, ApiClientError, useApiMutation, useApiQuery } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useAppContext, useCan } from "@/hooks/use-app-context";
+import { useAppContext, useCan, useProjectPath } from "@/hooks/use-app-context";
 import { formatNumber, formatRelative } from "@/lib/format";
 import { MATCH_TYPE_SHORT, TRIGGER_LABELS } from "@/lib/labels";
 import { toast } from "sonner";
@@ -123,6 +123,7 @@ function RuleTester({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
 }
 
 export function RulesView() {
+  const projectPath = useProjectPath();
   const { timezone } = useAppContext();
   const canManage = useCan("rules:manage");
   const canSettings = useCan("settings:view");
@@ -195,7 +196,7 @@ export function RulesView() {
                 {settings.data.defaultReply.enabled ? <Badge variant="info">เปิด ({settings.data.defaultReply.replyType})</Badge> : <Badge variant="muted">ปิด</Badge>}
               </span>
             </div>
-            <Button asChild variant="ghost" size="sm"><Link href="/settings?tab=auto-reply"><Settings2 /> ตั้งค่า</Link></Button>
+            <Button asChild variant="ghost" size="sm"><Link href={projectPath("/settings?tab=auto-reply")}><Settings2 /> ตั้งค่า</Link></Button>
           </CardContent>
         </Card>
       )}

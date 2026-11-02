@@ -10,7 +10,7 @@ import type { LineOutgoingMessage } from "@/lib/line/types";
 import type { SystemSettings } from "@/lib/validation/settings";
 import type { Prisma, ReplyContentType, ReplyLog, ReplySource } from "@/lib/generated/prisma/client";
 
-type Customer = { id: string; lineUserId: string; lineAccountId: string; isFollowing: boolean };
+type Customer = { id: string; lineUserId: string; projectId: string; isFollowing: boolean };
 
 function replyTypeOf(messages: LineOutgoingMessage[]): ReplyContentType {
   const types = new Set(messages.map((m) => m.type));
@@ -60,7 +60,7 @@ async function finalizeSuccess(params: {
         const rec = outgoingToRecord(m);
         await tx.message.create({
           data: {
-            lineAccountId: customer.lineAccountId,
+            projectId: customer.projectId,
             customerId: customer.id,
             direction: "OUTBOUND",
             type: rec.type,
@@ -129,7 +129,7 @@ export async function logBuildFailure(params: {
   await prisma.replyLog.upsert({
     where: { webhookEventId: params.webhookEventId },
     create: {
-      lineAccountId: params.customer.lineAccountId,
+      projectId: params.customer.projectId,
       customerId: params.customer.id,
       sourceMessageId: params.sourceMessageId,
       webhookEventId: params.webhookEventId,
@@ -174,7 +174,7 @@ export async function deliverAutoReply(params: {
 
   const primary = params.matchedRules[0];
   const data = {
-    lineAccountId: customer.lineAccountId,
+    projectId: customer.projectId,
     customerId: customer.id,
     sourceMessageId: params.sourceMessageId,
     ruleId: params.source === "RULE" ? (primary?.id ?? null) : null,
@@ -197,7 +197,7 @@ export async function deliverAutoReply(params: {
   try {
     const res = await lineApi.reply(params.token, params.replyToken, messages);
     await finalizeSuccess({ log, customer, messages, response: res, method: "REPLY", settings, sourceMessageId: params.sourceMessageId, ruleIds });
-    if (ruleIds.length) invalidateRuleCache();
+    if (ruleIds.length) invalidateRuleCache(customer.projectId);
     return "SUCCESS";
   } catch (err) {
     const canFallback =
@@ -243,7 +243,7 @@ export async function sendAdminPush(params: {
     existing ??
     (await prisma.replyLog.create({
       data: {
-        lineAccountId: customer.lineAccountId,
+        projectId: customer.projectId,
         customerId: customer.id,
         source: params.source ?? "ADMIN",
         method: "PUSH",

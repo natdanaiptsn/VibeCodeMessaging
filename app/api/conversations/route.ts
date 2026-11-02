@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { route, searchParamsObject } from "@/lib/api/handler";
+import { projectRoute, searchParamsObject } from "@/lib/api/handler";
 import { listConversations } from "@/services/message.service";
 import { getSettings } from "@/services/settings.service";
 import { dateRange } from "@/lib/dates";
@@ -15,9 +15,9 @@ const querySchema = paginationSchema.extend({
   to: z.preprocess(emptyToUndefined, dateStringSchema),
 });
 
-export const GET = route({ permission: "inbox:view" }, async ({ req }) => {
+export const GET = projectRoute({ permission: "inbox:view" }, async ({ req, project }) => {
   const q = querySchema.parse(searchParamsObject(req));
-  const { general } = await getSettings();
+  const { general } = await getSettings(project.id);
   const range = dateRange(q.from, q.to, general.timezone);
-  return listConversations({ ...q, ...range });
+  return listConversations(project.id, { ...q, ...range });
 });

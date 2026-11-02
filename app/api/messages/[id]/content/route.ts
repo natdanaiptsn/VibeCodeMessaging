@@ -17,7 +17,8 @@ export const GET = route<{ id: string }>({ permission: "inbox:view", rateLimitPe
   const provider = (message.payload as { contentProvider?: { type?: string; originalContentUrl?: string } } | null)?.contentProvider;
   if (provider?.type === "external") throw badRequest("ไฟล์นี้อยู่บนเซิร์ฟเวอร์ภายนอก");
 
-  const creds = await getLineCredentials();
+  // ใช้ token ของโปรเจกต์ที่ข้อความนี้อยู่ (ลิงก์รูปในหน้าเว็บส่ง header โปรเจกต์ไม่ได้)
+  const creds = await getLineCredentials(message.projectId);
   // Vercel จำกัด response body ที่ 4.5 MB จึงส่งต่อไฟล์ได้ไม่เกิน 4 MB บน Serverless
   const maxBytes = isServerless() ? 4 * 1024 * 1024 : 25 * 1024 * 1024;
   const tooLarge = () => new ApiError(413, `ไฟล์มีขนาดใหญ่เกิน ${maxBytes / 1024 / 1024} MB (ดูไฟล์นี้ได้ในแอป LINE OA)`, "PAYLOAD_TOO_LARGE");

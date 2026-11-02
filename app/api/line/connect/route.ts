@@ -1,4 +1,4 @@
-import { route, readJson } from "@/lib/api/handler";
+import { projectRoute, readJson } from "@/lib/api/handler";
 import { lineCredentialsSchema } from "@/lib/validation/line";
 import {
   getLineAccountPublic,
@@ -19,24 +19,25 @@ type Step = { key: string; label: string; status: StepStatus; message: string; h
  * เชื่อมต่อ LINE OA ในคลิกเดียว:
  * บันทึก Credentials → ขอ Access token → ตรวจบัญชี LINE OA → ตั้ง Webhook URL → ให้ LINE ทดสอบส่ง Webhook → ตรวจว่าเปิด Webhook แล้ว
  */
-export const POST = route({ permission: "line:manage", rateLimitPerMinute: 10 }, async (ctx) => {
+export const POST = projectRoute({ permission: "line:manage", rateLimitPerMinute: 10 }, async (ctx) => {
+  const { project } = ctx;
   const input = lineCredentialsSchema.parse(await readJson(ctx.req, 8192));
   const steps: Step[] = [];
   const finish = async (extra: Record<string, unknown> = {}) => {
     const ok = steps.every((s) => s.status === "success" || s.status === "warning" || s.status === "skipped");
     await auditFromCtx(ctx)({
       action: "line.connect",
-      entityType: "LineAccount",
+      entityType: "Project",
       summary: `เชื่อมต่อ LINE OA — ${ok ? "สำเร็จ" : "ไม่สำเร็จ"}`,
       metadata: { steps: steps.map((s) => ({ key: s.key, status: s.status })) },
     });
-    return { ok, steps, account: await getLineAccountPublic(), ...extra };
+    return { ok, steps, account: await getLineAccountPublic(project.id), ...extra };
   };
 
   // 1) บันทึกค่าที่กรอก (เข้ารหัสก่อนเก็บ)
   const provided = Boolean(input.channelId || input.channelSecret || input.channelAccessToken);
   if (provided) {
-    await saveLineCredentials({
+    await saveLineCredentials(project.id, {
       channelId: input.channelId || undefined,
       channelSecret: input.channelSecret || undefined,
       channelAccessToken: input.channelAccessToken || undefined,
@@ -45,7 +46,7 @@ export const POST = route({ permission: "line:manage", rateLimitPerMinute: 10 },
   }
 
   // 2) Access token
-  const creds = await getLineCredentials();
+  const creds = await getLineCredentials(project.id);
   if (!creds.channelSecret) {
     steps.push({ key: "token", label: "ขอสิทธิ์เข้าใช้ LINE", status: "failed", message: "ยังไม่ได้กรอก Channel secret", hint: "กรอก Channel secret ในขั้นตอนที่ 2" });
     return finish();
@@ -93,7 +94,7 @@ export const POST = route({ permission: "line:manage", rateLimitPerMinute: 10 },
   }
 
   // 4) ตั้ง Webhook URL ที่ LINE
-  const url = webhookUrl();
+  const url = webhookUrl(project.id);
   if (!url || !url.startsWith("https://")) {
     steps.push({
       key: "webhook-url",

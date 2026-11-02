@@ -10,6 +10,6 @@ export const getCurrentSession = cache(getSession);
 export async function requirePageUser(permission?: Permission) {
   const session = await getCurrentSession();
   if (!session) redirect("/login");
-  if (permission && !can(session.user.role, permission)) redirect("/inbox");
+  if (permission && !can(session.user.role, permission)) redirect("/projects");
   return session.user;
 }

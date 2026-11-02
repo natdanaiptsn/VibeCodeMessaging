@@ -1,4 +1,4 @@
-import { route } from "@/lib/api/handler";
+import { projectRoute } from "@/lib/api/handler";
 import { auditFromCtx } from "@/lib/audit";
 import { getSettings } from "@/services/settings.service";
 import {
@@ -13,8 +13,8 @@ import {
   TEST_RULE_NAME,
 } from "@/services/test-rule.service";
 
-async function status() {
-  const [rules, settings] = await Promise.all([getTestRuleStatus(), getSettings()]);
+async function status(projectId: string) {
+  const [rules, settings] = await Promise.all([getTestRuleStatus(projectId), getSettings(projectId)]);
   return {
     rules,
     text: { ruleName: TEST_RULE_NAME, keywords: TEST_KEYWORDS, reply: TEST_REPLY },
@@ -24,11 +24,11 @@ async function status() {
 }
 
 /** สถานะกฎทดสอบ (ใช้ในขั้นตอนที่ 5 ของหน้า LINE OA Settings) */
-export const GET = route({ permission: "line:view" }, async () => status());
+export const GET = projectRoute({ permission: "line:view" }, async ({ project }) => status(project.id));
 
 /** สร้าง/เปิดใช้งานกฎทดสอบ “test” (Text) และ “TestFlex” (Flex Message) */
-export const POST = route({ permission: "rules:manage", rateLimitPerMinute: 10 }, async (ctx) => {
-  const result = await ensureTestRules(ctx.session.user.id);
+export const POST = projectRoute({ permission: "rules:manage", rateLimitPerMinute: 10 }, async (ctx) => {
+  const result = await ensureTestRules(ctx.project.id, ctx.session.user.id);
   const audit = auditFromCtx(ctx);
   for (const [r, name] of [
     [result.text, TEST_RULE_NAME],
@@ -41,5 +41,5 @@ export const POST = route({ permission: "rules:manage", rateLimitPerMinute: 10 }
       summary: `${r.created ? "สร้าง" : "เปิดใช้งาน"}กฎ "${name}" จากหน้า LINE OA Settings`,
     });
   }
-  return { created: result.text.created || result.flex.created, ...(await status()) };
+  return { created: result.text.created || result.flex.created, ...(await status(ctx.project.id)) };
 });

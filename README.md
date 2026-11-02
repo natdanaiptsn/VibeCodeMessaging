@@ -28,6 +28,7 @@
 
 | เมนู | ความสามารถ |
 |---|---|
+| **โปรเจกต์** (หน้าแรกหลังเข้าสู่ระบบ) | 1 โปรเจกต์ = 1 LINE OA — สร้าง/เปลี่ยนชื่อ/ลบโปรเจกต์, การ์ดแสดงสถานะการเชื่อมต่อ LINE, ตอบกลับอัตโนมัติเปิด/ปิด, จำนวนลูกค้า/กฎ/ข้อความ 7 วัน, ค้นหาและกรองตามสถานะ, สลับโปรเจกต์ได้จากแถบเมนู — กฎ ข้อความ Flex ลูกค้า และการตั้งค่า **แยกกันในแต่ละโปรเจกต์** |
 | **กล่องข้อความ (Inbox)** | รายการแชท, ค้นหาลูกค้า/ข้อความ, กรองตามวันที่และประเภทข้อความ, ประวัติข้อความรายคน (รูปภาพ/สติกเกอร์/ตำแหน่ง/Postback/Flex), สถานะการตอบกลับ, **ส่งข้อความโดย Admin** (ข้อความ, Text Template, Flex Message) พร้อมกันส่งซ้ำ, อัปเดตอัตโนมัติทุก 5 วินาที |
 | **ลูกค้า** | รายชื่อลูกค้า, สถานะติดตาม/บล็อก, สถิติ, โน้ตภายใน, ดึงโปรไฟล์จาก LINE |
 | **ระบบตอบกลับอัตโนมัติ** | เพิ่ม/แก้ไข/ลบ/เปิด-ปิด/ทำสำเนากฎ, Keyword หลายคำ (AND/OR), Exact / Contains / Starts With / Ends With / Regular Expression (ป้องกัน ReDoS), Priority, ทริกเกอร์ตามเหตุการณ์ (ข้อความ, Postback, เพิ่มเพื่อน, รูปภาพ, สติกเกอร์, ตำแหน่ง), เครื่องมือทดสอบข้อความ |
@@ -45,7 +46,7 @@
 ```mermaid
 flowchart LR
   U[ลูกค้า LINE] -->|ส่งข้อความ| LP[LINE Platform]
-  LP -->|POST /api/webhook/line<br/>X-Line-Signature| WH[Webhook Route]
+  LP -->|POST /api/webhook/line/{projectId}<br/>X-Line-Signature| WH[Webhook Route]
   WH -->|1. ตรวจลายเซ็น raw body<br/>2. กัน Event ซ้ำ webhookEventId<br/>3. บันทึกคิว| DB[(PostgreSQL)]
   WH -->|ตอบ 200 ทันที| LP
   WH -.->|after: kick| Q[Queue Worker<br/>FOR UPDATE SKIP LOCKED]
@@ -60,8 +61,8 @@ flowchart LR
 
 ### ลำดับการประมวลผลข้อความ
 
-1. **รับ Event** ที่ `POST /api/webhook/line` (จำกัดขนาด 1 MB)
-2. **ตรวจสอบ Signature** — HMAC-SHA256 ของ *raw body* ด้วย Channel Secret เปรียบเทียบแบบ constant-time; ไม่ผ่าน = 401 และไม่บันทึกอะไร
+1. **รับ Event** ที่ `POST /api/webhook/line/{projectId}` ของแต่ละโปรเจกต์ (URL เดิม `/api/webhook/line` ใช้กับโปรเจกต์หลัก, จำกัดขนาด 1 MB)
+2. **ตรวจสอบ Signature** — HMAC-SHA256 ของ *raw body* ด้วย Channel Secret ของโปรเจกต์นั้น เปรียบเทียบแบบ constant-time; ไม่ผ่าน = 401 และไม่บันทึกอะไร
 3. **ตรวจสอบ Event ซ้ำ** — `webhookEventId` เป็น unique (`INSERT ... ON CONFLICT DO NOTHING`) รองรับ Webhook Redelivery
 4. บันทึก Event ลงตาราง `WebhookEvent` (เข้ารหัส Reply Token, ตัด replyToken ออกจาก payload) แล้ว **ตอบ HTTP 200 ทันที**
 5. **Background Worker** (เริ่มผ่าน `instrumentation.ts`) claim งานด้วย `FOR UPDATE SKIP LOCKED` — รันหลาย instance ได้, Event ของลูกค้าคนเดียวกันประมวลผลตามลำดับ, มี retry + backoff และกู้คืนงานค้าง
@@ -101,23 +102,27 @@ flowchart LR
 ```
 app/
   (dashboard)/            หน้าจัดการทั้งหมด (ต้องเข้าสู่ระบบ)
-    inbox/ customers/ auto-reply/ text-messages/
-    flex-builder/ line-settings/ settings/
+    (account)/projects/   รายการโปรเจกต์ (หน้าแรก)
+    (account)/settings/   บัญชีและผู้ใช้งาน (ใช้ร่วมกันทุกโปรเจกต์)
+    p/[projectId]/        หน้าภายในโปรเจกต์: inbox/ customers/ auto-reply/
+                          text-messages/ flex-builder/ line-settings/ settings/
   login/                  หน้าเข้าสู่ระบบ
   api/
-    webhook/line/         ★ LINE Webhook Endpoint
+    webhook/line/[projectId]/  ★ LINE Webhook Endpoint ของแต่ละโปรเจกต์ (webhook/line = URL เดิมของโปรเจกต์หลัก)
+    projects/             สร้าง/แก้ไข/ลบโปรเจกต์
     auth/ conversations/ customers/ messages/ rules/
     text-templates/ flex-templates/ media/ line/
     settings/ users/ audit-logs/ health/
 components/
   ui/                     shadcn/ui components
   layout/ common/         Sidebar, สถานะ Loading/Empty/Error ฯลฯ
-  inbox/ customers/ auto-reply/ text-messages/ test-chat/
+  projects/ inbox/ customers/ auto-reply/ text-messages/ test-chat/
   flex/                   Flex Message Preview renderer
   flex-builder/           Visual Flex Message Builder (model, canvas, inspector)
   line-settings/ settings/
 lib/
   api/handler.ts          Route wrapper: Auth, สิทธิ์, CSRF, Rate limit, Error handling
+                          + projectRoute() ระบุโปรเจกต์ด้วย header x-project-id (หน้าเว็บส่งให้อัตโนมัติ)
   auth/                   Session, Password, Permissions
   auto-reply/             Matcher, Regex safety (ReDoS), Sandboxed regex
   flex/                   Flex types, validator, URL safety, presets, render variables
@@ -134,7 +139,7 @@ services/
   reply.service.ts                    ส่งข้อความ + บันทึกผล
   text-template.service.ts flex-message.service.ts
   customer.service.ts message.service.ts rule.service.ts
-  settings.service.ts line-account.service.ts maintenance.service.ts
+  project.service.ts settings.service.ts line-account.service.ts maintenance.service.ts
 hooks/                    useApiQuery / useApiMutation, useDebounce, App context
 prisma/
   schema.prisma  migrations/  seed.ts
@@ -151,14 +156,14 @@ proxy.ts                  Redirect ไปหน้า Login เมื่อไ�
 | ตาราง | หน้าที่ |
 |---|---|
 | `User`, `Session` | ผู้ดูแลระบบ (bcrypt) และ session (เก็บเฉพาะ SHA-256 ของ token) |
-| `LineAccount` | ข้อมูลบัญชี LINE OA + Credentials ที่เข้ารหัส AES-256-GCM |
-| `Customer` | ลูกค้า LINE (`@@unique([lineAccountId, lineUserId])`) |
+| `Project` (ตาราง `LineAccount`) | โปรเจกต์ = 1 บัญชี LINE OA: ชื่อ, การตั้งค่าของโปรเจกต์, Credentials ที่เข้ารหัส AES-256-GCM (`botUserId` unique → 1 LINE OA ต่อ 1 โปรเจกต์) |
+| `Customer` | ลูกค้า LINE (`@@unique([projectId, lineUserId])`) |
 | `Message` | ข้อความขาเข้า/ขาออก (index ตามลูกค้า/เวลา, GIN trigram สำหรับค้นหา) |
 | `WebhookEvent` | คิว + ป้องกัน Event ซ้ำ (`webhookEventId` unique) |
-| `ReplyRule`, `ReplyKeyword` | กฎตอบกลับและ Keyword |
-| `ReplyTemplate`, `FlexTemplate` | Text Template และ Flex Template |
+| `ReplyRule`, `ReplyKeyword` | กฎตอบกลับและ Keyword (กฎเป็นของโปรเจกต์) |
+| `ReplyTemplate`, `FlexTemplate` | Text Template และ Flex Template (เป็นของโปรเจกต์) |
 | `ReplyLog` | บันทึกการตอบกลับเบื้องหลัง — แสดงสถานะ/ข้อผิดพลาดใต้ข้อความใน Inbox (`webhookEventId` unique กันตอบซ้ำ, `retryKey` unique กัน Push ซ้ำ) |
-| `SystemSetting` | การตั้งค่าระบบ (key-value ตรวจสอบด้วย Zod) |
+| `SystemSetting` | การตั้งค่าที่ใช้ร่วมกันทุกโปรเจกต์ เช่น ระบบ Log (key-value ตรวจสอบด้วย Zod) |
 | `AuditLog` | บันทึกการแก้ไขกฎ/การตั้งค่า/การเข้าสู่ระบบ |
 | `MediaAsset` | รูปภาพที่อัปโหลดสำหรับ Flex Message |
 
@@ -245,7 +250,7 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 | `SESSION_TTL_HOURS` | | อายุ session (ค่าเริ่มต้น 168 ชม.) |
 | `COOKIE_SECURE` | | `auto` / `true` / `false` |
 | `TRUST_PROXY` | | `true` เมื่ออยู่หลัง Reverse Proxy (อ่าน IP จาก X-Forwarded-For) |
-| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | | (ไม่บังคับ) ถ้ากำหนด จะใช้แทนค่าที่กรอกในหน้าเว็บ — 2 ค่านี้พอสำหรับเชื่อมต่อ |
+| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | | (ไม่บังคับ) ใช้กับ **โปรเจกต์หลัก** เท่านั้น ถ้ากำหนด จะใช้แทนค่าที่กรอกในหน้าเว็บ — โปรเจกต์อื่นกรอกในหน้า LINE OA Settings ของโปรเจกต์นั้น |
 | `LINE_CHANNEL_ACCESS_TOKEN` | | (ไม่บังคับ) token แบบ long-lived — ถ้าไม่ตั้ง ระบบขอ token จาก LINE ให้อัตโนมัติ |
 | `DATABASE_URL_UNPOOLED` | | (ไม่บังคับ) connection แบบ direct สำหรับ migration เมื่อ `DATABASE_URL` เป็น pooler (Neon/Vercel) |
 | `CRON_SECRET` | Vercel | รหัสสำหรับเรียก `/api/cron/maintenance` (Vercel Cron ส่งให้อัตโนมัติ) |
@@ -262,7 +267,9 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 
 ## วิธีเชื่อมต่อ LINE OA
 
-ทำครั้งเดียว ประมาณ 5 นาที — ในเว็บมีหน้า **LINE OA Settings** ที่อธิบายทีละขั้นพร้อมปุ่มลัด และตรวจสถานะให้อัตโนมัติ
+**1 โปรเจกต์เชื่อมต่อ LINE OA ได้ 1 บัญชี** — ถ้ามีหลาย LINE OA ให้สร้างโปรเจกต์ละบัญชีที่หน้า **โปรเจกต์** (หน้าแรกหลังเข้าสู่ระบบ) แล้วกด **เชื่อมต่อ LINE OA** บนการ์ดของโปรเจกต์ (LINE OA เดียวกันเชื่อมกับ 2 โปรเจกต์ไม่ได้)
+
+ทำครั้งเดียวต่อโปรเจกต์ ประมาณ 5 นาที — ในเว็บมีหน้า **LINE OA Settings** ของแต่ละโปรเจกต์ที่อธิบายทีละขั้นพร้อมปุ่มลัด และตรวจสถานะให้อัตโนมัติ
 
 **ขั้นตอนที่ 1 — เปิดใช้ Messaging API** (ใน [LINE Official Account Manager](https://manager.line.biz))
 1. เลือกบัญชี LINE OA → กด **ตั้งค่า** (Settings) มุมขวาบน → เมนูซ้าย **Messaging API**
@@ -283,13 +290,15 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 
 **ขั้นตอนที่ 5 — ทดสอบ** เพิ่ม LINE OA เป็นเพื่อน (มีลิงก์เพิ่มเพื่อนในหน้าเว็บ) → กดปุ่ม **สร้างกฎทดสอบ** (สร้างให้ 2 กฎอัตโนมัติ กดซ้ำได้) → พิมพ์ `test` หรือ `ทดสอบ` จะได้ข้อความธรรมดา และพิมพ์ `TestFlex` จะได้การ์ด Flex Message ชื่อ “TestFlex” — หน้าเว็บจะแสดงทันทีเมื่อได้รับข้อความแรก (ทดสอบเสร็จแล้วปิดหรือลบกฎได้ที่หน้าระบบตอบกลับอัตโนมัติ และแก้หน้าตาการ์ด TestFlex ได้ใน Flex Message Builder)
 
-> ทางเลือก: กำหนดผ่าน Environment `LINE_CHANNEL_ID` + `LINE_CHANNEL_SECRET` (และ `LINE_CHANNEL_ACCESS_TOKEN` ถ้าต้องการ) แทนการกรอกในหน้าเว็บ — ค่าจาก Environment มีลำดับความสำคัญสูงกว่า
+> ทางเลือก (เฉพาะโปรเจกต์หลัก): กำหนดผ่าน Environment `LINE_CHANNEL_ID` + `LINE_CHANNEL_SECRET` (และ `LINE_CHANNEL_ACCESS_TOKEN` ถ้าต้องการ) แทนการกรอกในหน้าเว็บ — ค่าจาก Environment มีลำดับความสำคัญสูงกว่า
 
 ### Webhook URL
 
 ```
-https://<โดเมนของคุณ>/api/webhook/line
+https://<โดเมนของคุณ>/api/webhook/line/<รหัสโปรเจกต์>
 ```
+
+แต่ละโปรเจกต์มี URL ของตัวเอง (ดูได้ที่หน้า LINE OA Settings ของโปรเจกต์) — URL เดิม `https://<โดเมนของคุณ>/api/webhook/line` ยังใช้ได้กับ **โปรเจกต์หลัก** (โปรเจกต์ที่มีดาว ★) จึงไม่ต้องแก้ค่าที่ตั้งไว้ใน LINE ก่อนหน้านี้
 
 ปกติไม่ต้องตั้งเอง เพราะปุ่ม **เชื่อมต่อ LINE OA** ตั้งให้อัตโนมัติ ถ้าต้องการตั้งเองใน LINE Developers Console: แท็บ **Messaging API** → *Webhook settings* → **Edit** → วาง URL → **Verify** → เปิด **Use webhook** และแนะนำให้เปิด **Webhook redelivery** (ระบบกัน Event ซ้ำด้วย `webhookEventId` อยู่แล้ว)
 
@@ -354,12 +363,21 @@ https://<โดเมนของคุณ>/api/webhook/line
 
 ใช้ **Push API** ซึ่งนับรวมโควตาข้อความรายเดือนของ LINE OA และส่งได้เฉพาะลูกค้าที่ยังเป็นเพื่อนอยู่ ระบบใช้ `X-Line-Retry-Key` ป้องกันการส่งซ้ำเมื่อกดซ้ำหรือเครือข่ายขัดข้อง
 
+### โปรเจกต์
+
+- หน้าแรกหลังเข้าสู่ระบบคือรายการ **โปรเจกต์** — กด **สร้างโปรเจกต์** → ตั้งชื่อ → ระบบพาไปหน้าเชื่อมต่อ LINE OA ของโปรเจกต์นั้นทันที
+- ภายในโปรเจกต์ เมนูด้านซ้ายทั้งหมด (กล่องข้อความ ลูกค้า กฎ Text/Flex LINE OA Settings ตั้งค่าโปรเจกต์) เป็นข้อมูลของโปรเจกต์นั้นเท่านั้น — สลับโปรเจกต์ได้จากกล่องชื่อโปรเจกต์ด้านบนของเมนู
+- **ตั้งค่าโปรเจกต์**: เปิด/ปิดตอบกลับอัตโนมัติ, พฤติกรรมเมื่อพบหลายกฎ, Default Reply, Timezone ฯลฯ แยกกันแต่ละโปรเจกต์
+- **บัญชีและผู้ใช้งาน** (เมนูผู้ใช้): รหัสผ่าน, ผู้ใช้งาน, Audit Log และระบบ Log — ใช้ร่วมกันทุกโปรเจกต์ (ผู้ใช้ทุกคนเห็นทุกโปรเจกต์ตามบทบาทของตน)
+- **ลบโปรเจกต์** (เฉพาะ OWNER) ต้องพิมพ์ชื่อโปรเจกต์ยืนยัน — ลูกค้า ข้อความ กฎ และ Template ของโปรเจกต์ถูกลบถาวร
+- อัปเกรดจากเวอร์ชันก่อน: migration ย้ายข้อมูลเดิมทั้งหมด (ลูกค้า ข้อความ กฎ Template การตั้งค่า) เข้า **โปรเจกต์หลัก** ให้อัตโนมัติ และลิงก์เดิม เช่น `/inbox` จะพาไปหน้าเดียวกันของโปรเจกต์หลัก
+
 ### สิทธิ์ผู้ใช้
 
 | บทบาท | สิทธิ์ |
 |---|---|
-| OWNER | ทุกอย่าง รวมถึง LINE Credentials, จัดการผู้ใช้, Audit Log |
-| ADMIN | จัดการกฎ, Template, Flex, ตั้งค่าระบบ |
+| OWNER | ทุกอย่าง รวมถึง LINE Credentials, ลบโปรเจกต์, จัดการผู้ใช้, Audit Log |
+| ADMIN | สร้าง/เปลี่ยนชื่อโปรเจกต์, จัดการกฎ, Template, Flex, ตั้งค่าโปรเจกต์ |
 | AGENT | Inbox (ส่งข้อความ), ลูกค้า, ดูกฎ/Template, แชททดสอบ |
 
 ---

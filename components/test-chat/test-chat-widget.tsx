@@ -27,7 +27,7 @@ import {
 import { toast } from "sonner";
 import { FlexPreview, type FlexAction } from "@/components/flex/flex-preview";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
-import { useCan } from "@/hooks/use-app-context";
+import { useCan, useProjectPath } from "@/hooks/use-app-context";
 import { cn } from "@/lib/utils";
 
 type Trigger = "TEXT" | "POSTBACK" | "FOLLOW" | "IMAGE" | "STICKER" | "LOCATION";
@@ -80,6 +80,7 @@ function BotAvatar({ pictureUrl, className }: { pictureUrl?: string | null; clas
 }
 
 function ResultNote({ result }: { result: TestResult }) {
+  const projectPath = useProjectPath();
   let icon: ReactNode;
   let body: ReactNode;
   if (result.source === "RULE") {
@@ -104,7 +105,7 @@ function ResultNote({ result }: { result: TestResult }) {
     body = (
       <>
         {SKIP_LABEL[result.skippedReason ?? ""] ?? "ไม่มีการตอบกลับ"}{" "}
-        <Link href="/auto-reply" className="font-medium text-primary hover:underline">สร้างกฎ</Link>
+        <Link href={projectPath("/auto-reply")} className="font-medium text-primary hover:underline">สร้างกฎ</Link>
       </>
     );
   }
@@ -144,6 +145,7 @@ function UserBubble({ item }: { item: Extract<ChatItem, { role: "user" }> }) {
 }
 
 export function TestChatWidget() {
+  const projectPath = useProjectPath();
   const canTest = useCan("rules:view");
   const canViewLine = useCan("line:view");
   const pathname = usePathname();
@@ -248,7 +250,7 @@ export function TestChatWidget() {
     inputRef.current?.focus();
   };
 
-  const lifted = pathname.startsWith("/inbox");
+  const lifted = /^\/p\/[^/]+\/inbox(\/|$)/.test(pathname);
 
   return (
     <>
@@ -321,7 +323,7 @@ export function TestChatWidget() {
                   rules.data && (
                     <p className="mt-4 text-xs text-muted-foreground">
                       ยังไม่มีกฎแบบคีย์เวิร์ด —{" "}
-                      <Link href="/auto-reply" className="font-medium text-primary hover:underline">สร้างกฎตอบกลับ</Link>
+                      <Link href={projectPath("/auto-reply")} className="font-medium text-primary hover:underline">สร้างกฎตอบกลับ</Link>
                     </p>
                   )
                 )}

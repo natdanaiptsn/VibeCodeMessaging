@@ -6,6 +6,7 @@ import { renderTemplate } from "@/lib/templates/variables";
 import type { LineOutgoingFlex } from "@/lib/line/types";
 import type { FlexTemplateInput } from "@/lib/validation/templates";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { getSettings } from "@/services/settings.service";
 
 export type RenderedFlex = { ok: true; message: LineOutgoingFlex } | { ok: false; error: string; validation: FlexValidationResult };
 
@@ -28,9 +29,9 @@ export function containerTypeOf(contents: unknown): string {
   return (contents as { type?: string })?.type === "carousel" ? "carousel" : "bubble";
 }
 
-export async function listFlexTemplates(search?: string) {
+export async function listFlexTemplates(projectId: string, search?: string) {
   return prisma.flexTemplate.findMany({
-    where: search ? { name: { contains: search, mode: "insensitive" } } : undefined,
+    where: { projectId, ...(search ? { name: { contains: search, mode: "insensitive" } } : {}) },
     orderBy: { updatedAt: "desc" },
     take: 500,
     select: {
@@ -47,9 +48,14 @@ export async function listFlexTemplates(search?: string) {
   });
 }
 
-export async function createFlexTemplate(input: FlexTemplateInput, userId: string) {
+export async function getFlexTemplate(projectId: string, id: string) {
+  return prisma.flexTemplate.findFirst({ where: { id, projectId } });
+}
+
+export async function createFlexTemplate(projectId: string, input: FlexTemplateInput, userId: string) {
   return prisma.flexTemplate.create({
     data: {
+      projectId,
       name: input.name,
       description: input.description ?? null,
       altText: input.altText,
@@ -73,11 +79,11 @@ export async function updateFlexTemplate(id: string, input: FlexTemplateInput) {
   });
 }
 
-export async function flexTemplateUsage(id: string) {
+export async function flexTemplateUsage(projectId: string, id: string) {
   const [rules, settings] = await Promise.all([
     prisma.replyRule.count({ where: { flexTemplateId: id } }),
-    prisma.systemSetting.findUnique({ where: { key: "defaultReply" } }),
+    getSettings(projectId),
   ]);
-  const usedAsDefault = (settings?.value as { flexTemplateId?: string } | null)?.flexTemplateId === id;
+  const usedAsDefault = settings.defaultReply.flexTemplateId === id;
   return { rules, usedAsDefault };
 }

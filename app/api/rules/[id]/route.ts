@@ -1,24 +1,24 @@
 import { z } from "zod";
-import { route, readJson } from "@/lib/api/handler";
+import { projectRoute, readJson } from "@/lib/api/handler";
 import { ruleInputSchema } from "@/lib/validation/rules";
 import { idParamsSchema } from "@/lib/validation/common";
 import { notFound } from "@/lib/errors";
 import { deleteRule, getRule, patchRule, updateRule } from "@/services/rule.service";
 import { auditFromCtx } from "@/lib/audit";
 
-export const GET = route<{ id: string }>({ permission: "rules:view" }, async ({ params }) => {
+export const GET = projectRoute<{ id: string }>({ permission: "rules:view" }, async ({ params, project }) => {
   const { id } = idParamsSchema.parse(params);
-  const rule = await getRule(id);
+  const rule = await getRule(project.id, id);
   if (!rule) throw notFound("ไม่พบกฎตอบกลับ");
   return rule;
 });
 
-export const PUT = route<{ id: string }>({ permission: "rules:manage" }, async (ctx) => {
+export const PUT = projectRoute<{ id: string }>({ permission: "rules:manage" }, async (ctx) => {
   const { id } = idParamsSchema.parse(ctx.params);
-  const before = await getRule(id);
+  const before = await getRule(ctx.project.id, id);
   if (!before) throw notFound("ไม่พบกฎตอบกลับ");
   const input = ruleInputSchema.parse(await readJson(ctx.req));
-  const rule = await updateRule(id, input, ctx.session.user.id);
+  const rule = await updateRule(ctx.project.id, id, input, ctx.session.user.id);
   await auditFromCtx(ctx)({
     action: "rule.update",
     entityType: "ReplyRule",
@@ -36,10 +36,10 @@ const patchSchema = z
   .object({ isActive: z.boolean().optional(), priority: z.coerce.number().int().min(-1000).max(1000).optional() })
   .refine((d) => d.isActive !== undefined || d.priority !== undefined, "ไม่มีข้อมูลที่ต้องการแก้ไข");
 
-export const PATCH = route<{ id: string }>({ permission: "rules:manage" }, async (ctx) => {
+export const PATCH = projectRoute<{ id: string }>({ permission: "rules:manage" }, async (ctx) => {
   const { id } = idParamsSchema.parse(ctx.params);
   const input = patchSchema.parse(await readJson(ctx.req));
-  const rule = await patchRule(id, input, ctx.session.user.id);
+  const rule = await patchRule(ctx.project.id, id, input, ctx.session.user.id);
   await auditFromCtx(ctx)({
     action: input.isActive !== undefined ? (input.isActive ? "rule.enable" : "rule.disable") : "rule.priority",
     entityType: "ReplyRule",
@@ -50,11 +50,11 @@ export const PATCH = route<{ id: string }>({ permission: "rules:manage" }, async
   return rule;
 });
 
-export const DELETE = route<{ id: string }>({ permission: "rules:manage" }, async (ctx) => {
+export const DELETE = projectRoute<{ id: string }>({ permission: "rules:manage" }, async (ctx) => {
   const { id } = idParamsSchema.parse(ctx.params);
-  const rule = await getRule(id);
+  const rule = await getRule(ctx.project.id, id);
   if (!rule) throw notFound("ไม่พบกฎตอบกลับ");
-  await deleteRule(id);
+  await deleteRule(ctx.project.id, id);
   await auditFromCtx(ctx)({
     action: "rule.delete",
     entityType: "ReplyRule",

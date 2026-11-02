@@ -44,7 +44,7 @@ import { ChatBackdrop, FlexPreview } from "@/components/flex/flex-preview";
 import { renderFlexVariables } from "@/lib/flex/render";
 import { buildTemplateValues, renderTemplate } from "@/lib/templates/variables";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
-import { useAppContext, useCan } from "@/hooks/use-app-context";
+import { useAppContext, useCan, useProjectPath, useProject } from "@/hooks/use-app-context";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +74,8 @@ type Account = {
   lastVerifiedAt: string | null;
   lastWebhookAt: string | null;
   webhookUrl: string | null;
+  legacyWebhookUrl: string | null;
+  isDefault: boolean;
   lastInbound: { at: string; text: string | null; type: string } | null;
 };
 
@@ -175,6 +177,8 @@ function copy(text: string, label: string) {
 // ───────────────────────── หน้าหลัก ─────────────────────────
 
 export function LineSettingsView() {
+  const projectPath = useProjectPath();
+  const project = useProject();
   const { timezone } = useAppContext();
   const canManage = useCan("line:manage");
   const qc = useQueryClient();
@@ -300,7 +304,7 @@ export function LineSettingsView() {
     <>
       <PageHeader
         title="เชื่อมต่อ LINE OA"
-        description="ทำตาม 5 ขั้นตอนด้านล่างครั้งเดียว ใช้เวลาประมาณ 5 นาที ระบบจะทำส่วนที่ยุ่งยากให้อัตโนมัติ"
+        description={`โปรเจกต์ “${project.name}” เชื่อมต่อ LINE OA ได้ 1 บัญชี — ทำตาม 5 ขั้นตอนด้านล่างครั้งเดียว ใช้เวลาประมาณ 5 นาที ระบบจะทำส่วนที่ยุ่งยากให้อัตโนมัติ`}
       />
 
       {/* ─── สรุปสถานะ ─── */}
@@ -670,15 +674,15 @@ export function LineSettingsView() {
               <Tip tone="warn">
                 <p>
                   ระบบตอบกลับอัตโนมัติ<strong>ถูกปิดอยู่</strong> — ลูกค้าจะไม่ได้รับคำตอบ เปิดได้ที่หน้า{" "}
-                  <Link className="font-medium underline" href="/settings">ตั้งค่าระบบ</Link> → ทั่วไป → เปิด/ปิด Auto Reply
+                  <Link className="font-medium underline" href={projectPath("/settings")}>ตั้งค่าโปรเจกต์</Link> → ทั่วไป → เปิด/ปิด Auto Reply
                 </p>
               </Tip>
             )}
             <Tip>
               <p>
-                ทดสอบเสร็จแล้ว จะเก็บกฎไว้ ปิด หรือลบก็ได้ที่หน้า <Link className="font-medium underline" href="/auto-reply">ระบบตอบกลับอัตโนมัติ</Link>{" "}
+                ทดสอบเสร็จแล้ว จะเก็บกฎไว้ ปิด หรือลบก็ได้ที่หน้า <Link className="font-medium underline" href={projectPath("/auto-reply")}>ระบบตอบกลับอัตโนมัติ</Link>{" "}
                 (ชื่อกฎ “{TEST_RULE_LABEL}” และ “{TEST_FLEX_RULE_LABEL}”) ส่วนการ์ด TestFlex แก้หน้าตาได้ที่หน้า{" "}
-                <Link className="font-medium underline" href="/flex-builder">Flex Message Builder</Link>
+                <Link className="font-medium underline" href={projectPath("/flex-builder")}>Flex Message Builder</Link>
               </p>
             </Tip>
             <div className="rounded-lg border p-3">
@@ -694,7 +698,7 @@ export function LineSettingsView() {
                 </p>
               )}
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button asChild variant="outline" size="sm"><Link href="/inbox"><MessagesSquare /> เปิดกล่องข้อความ</Link></Button>
+                <Button asChild variant="outline" size="sm"><Link href={projectPath("/inbox")}><MessagesSquare /> เปิดกล่องข้อความ</Link></Button>
               </div>
             </div>
             <div>
@@ -702,10 +706,10 @@ export function LineSettingsView() {
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
                 <li>ตรวจว่าเปิด <strong>Webhook</strong> แล้ว (ขั้นตอนที่ 4) — ถ้าหน้านี้ไม่แสดงว่าได้รับข้อความ แปลว่า LINE ยังไม่ได้ส่งมา</li>
                 <li>
-                  ได้รับข้อความแต่ไม่ตอบ: เปิดแชทนั้นในหน้า <Link className="underline" href="/inbox">กล่องข้อความ</Link> — ถ้าส่งคำตอบไม่สำเร็จ
+                  ได้รับข้อความแต่ไม่ตอบ: เปิดแชทนั้นในหน้า <Link className="underline" href={projectPath("/inbox")}>กล่องข้อความ</Link> — ถ้าส่งคำตอบไม่สำเร็จ
                   จะมีข้อความแจ้งข้อผิดพลาดสีแดงใต้ข้อความของลูกค้า หรือลองพิมพ์ข้อความเดียวกันใน <button type="button" className="underline" onClick={openTestChat}>แชททดสอบ</button> เพื่อดูว่าตรงกับกฎไหม
                 </li>
-                <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href="/settings">ตั้งค่าระบบ</Link> และพิมพ์ <Ui>test</Ui> หรือ <Ui>TestFlex</Ui> ตรงตัว (ไม่มีคำอื่นต่อท้าย)</li>
+                <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href={projectPath("/settings")}>ตั้งค่าโปรเจกต์</Link> และพิมพ์ <Ui>test</Ui> หรือ <Ui>TestFlex</Ui> ตรงตัว (ไม่มีคำอื่นต่อท้าย)</li>
                 <li>ได้คำตอบซ้ำ 2 ข้อความ: ปิด “ข้อความตอบกลับอัตโนมัติ” ใน LINE OA Manager (ขั้นตอนที่ 4 ข้อ 3)</li>
               </ul>
             </div>
@@ -717,7 +721,7 @@ export function LineSettingsView() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base"><Webhook className="size-4 text-primary" /> Webhook</CardTitle>
-              <CardDescription>ที่อยู่ที่ LINE ส่งข้อความลูกค้ามา (ตั้งให้อัตโนมัติในขั้นตอนที่ 3)</CardDescription>
+              <CardDescription>ที่อยู่ที่ LINE ส่งข้อความลูกค้ามา (ตั้งให้อัตโนมัติในขั้นตอนที่ 3) — แต่ละโปรเจกต์มี URL ของตัวเอง</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex gap-1.5">
@@ -726,6 +730,11 @@ export function LineSettingsView() {
                   <Copy />
                 </Button>
               </div>
+              {a.legacyWebhookUrl && (
+                <p className="text-xs text-muted-foreground">
+                  โปรเจกต์หลักยังรับข้อความจาก URL เดิม <span className="font-mono break-all">{a.legacyWebhookUrl}</span> ได้ ไม่ต้องเปลี่ยน
+                </p>
+              )}
               {webhook.data && !webhook.data.error && (
                 <div className="flex flex-wrap gap-1.5">
                   {webhook.data.matches ? <Badge variant="success">URL ที่ LINE ตรงกับระบบนี้</Badge> : <Badge variant="warning">URL ที่ LINE ไม่ตรงกับระบบนี้</Badge>}

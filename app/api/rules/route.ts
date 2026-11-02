@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { route, readJson, searchParamsObject } from "@/lib/api/handler";
+import { projectRoute, readJson, searchParamsObject } from "@/lib/api/handler";
 import { ruleInputSchema, TRIGGERS } from "@/lib/validation/rules";
 import { emptyToUndefined, searchSchema } from "@/lib/validation/common";
 import { createRule, listRules } from "@/services/rule.service";
@@ -11,11 +11,13 @@ const querySchema = z.object({
   status: z.preprocess(emptyToUndefined, z.enum(["active", "inactive"]).optional()),
 });
 
-export const GET = route({ permission: "rules:view" }, async ({ req }) => listRules(querySchema.parse(searchParamsObject(req))));
+export const GET = projectRoute({ permission: "rules:view" }, async ({ req, project }) =>
+  listRules(project.id, querySchema.parse(searchParamsObject(req))),
+);
 
-export const POST = route({ permission: "rules:manage" }, async (ctx) => {
+export const POST = projectRoute({ permission: "rules:manage" }, async (ctx) => {
   const input = ruleInputSchema.parse(await readJson(ctx.req));
-  const rule = await createRule(input, ctx.session.user.id);
+  const rule = await createRule(ctx.project.id, input, ctx.session.user.id);
   await auditFromCtx(ctx)({
     action: "rule.create",
     entityType: "ReplyRule",

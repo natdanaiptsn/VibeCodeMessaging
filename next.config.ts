@@ -49,10 +49,10 @@ const nextConfig: NextConfig = {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
   async redirects() {
-    // หน้า Dashboard และประวัติการตอบกลับถูกนำออกแล้ว — ลิงก์/บุ๊กมาร์กเดิมพาไปหน้ากล่องข้อความแทน
+    // หน้า Dashboard และประวัติการตอบกลับถูกนำออกแล้ว — ลิงก์/บุ๊กมาร์กเดิมพาไปหน้ารายการโปรเจกต์
     return [
-      { source: "/dashboard", destination: "/inbox", permanent: false },
-      { source: "/reply-logs", destination: "/inbox", permanent: false },
+      { source: "/dashboard", destination: "/projects", permanent: false },
+      { source: "/reply-logs", destination: "/projects", permanent: false },
     ];
   },
 };

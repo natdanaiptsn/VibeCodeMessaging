@@ -1,16 +1,7 @@
 import { requirePageUser } from "@/lib/auth/current-user";
-import { AppShell } from "@/components/layout/app-shell";
-import { Providers } from "@/components/providers";
-import { getSettings } from "@/services/settings.service";
 
+/** ทุกหน้าในกลุ่มนี้ต้องเข้าสู่ระบบ */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const user = await requirePageUser();
-  const settings = await getSettings();
-  return (
-    <Providers>
-      <AppShell user={user} timezone={settings.general.timezone}>
-        {children}
-      </AppShell>
-    </Providers>
-  );
+  await requirePageUser();
+  return children;
 }

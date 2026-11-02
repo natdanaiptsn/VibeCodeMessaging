@@ -27,7 +27,7 @@ export const GET = route({ permission: "audit:view" }, async ({ req }) => {
       orderBy: { createdAt: "desc" },
       skip: (q.page - 1) * q.pageSize,
       take: q.pageSize,
-      include: { user: { select: { name: true, email: true } } },
+      include: { user: { select: { name: true, email: true } }, project: { select: { id: true, name: true } } },
     }),
     prisma.auditLog.count({ where }),
   ]);

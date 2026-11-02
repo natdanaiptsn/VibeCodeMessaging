@@ -17,7 +17,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/common/states
 import { ChatBackdrop, FlexPreview } from "@/components/flex/flex-preview";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useAppContext, useCan } from "@/hooks/use-app-context";
+import { useAppContext, useCan, useProjectPath } from "@/hooks/use-app-context";
 import { formatRelative } from "@/lib/format";
 import { FLEX_PRESETS } from "@/lib/flex/presets";
 import { renderFlexVariables } from "@/lib/flex/render";
@@ -26,6 +26,7 @@ import { sampleTemplateValues } from "@/lib/templates/variables";
 type Item = { id: string; name: string; description: string | null; altText: string; containerType: string; contents: unknown; updatedAt: string; _count: { rules: number } };
 
 export function FlexTemplatesList() {
+  const projectPath = useProjectPath();
   const { timezone } = useAppContext();
   const canEdit = useCan("flex:manage");
   const router = useRouter();
@@ -47,7 +48,7 @@ export function FlexTemplatesList() {
       });
       toast.success("ทำสำเนาแล้ว");
       await qc.invalidateQueries({ queryKey: ["flex-templates"] });
-      router.push(`/flex-builder/${created.id}`);
+      router.push(projectPath(`/flex-builder/${created.id}`));
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "ทำสำเนาไม่สำเร็จ");
     } finally {
@@ -75,14 +76,14 @@ export function FlexTemplatesList() {
       <PageHeader
         title="Flex Message Builder"
         description="ออกแบบ Flex Message แบบ Visual โดยไม่ต้องเขียน JSON"
-        actions={canEdit && <Button asChild><Link href="/flex-builder/new"><Plus /> สร้าง Flex Message</Link></Button>}
+        actions={canEdit && <Button asChild><Link href={projectPath("/flex-builder/new")}><Plus /> สร้าง Flex Message</Link></Button>}
       />
       {canEdit && (
         <div className="mb-5">
           <p className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Sparkles className="size-4 text-primary" /> เริ่มจากเทมเพลต</p>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {FLEX_PRESETS.map((p) => (
-              <Link key={p.key} href={`/flex-builder/new?preset=${p.key}`} className="rounded-xl border bg-card p-3 transition hover:border-primary hover:shadow-sm">
+              <Link key={p.key} href={projectPath(`/flex-builder/new?preset=${p.key}`)} className="rounded-xl border bg-card p-3 transition hover:border-primary hover:shadow-sm">
                 <p className="text-sm font-medium">{p.name}</p>
                 <p className="text-xs text-muted-foreground">{p.description}</p>
               </Link>
@@ -106,7 +107,7 @@ export function FlexTemplatesList() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {data.map((t) => (
             <Card key={t.id} className="gap-0 overflow-hidden py-0">
-              <Link href={`/flex-builder/${t.id}`} className="block">
+              <Link href={projectPath(`/flex-builder/${t.id}`)} className="block">
                 <ChatBackdrop className="pointer-events-none h-56 overflow-hidden rounded-none">
                   <div className="origin-top-left scale-[0.7]">
                     <FlexPreview contents={renderFlexVariables(t.contents, sampleTemplateValues())} />
@@ -115,7 +116,7 @@ export function FlexTemplatesList() {
               </Link>
               <CardContent className="flex items-start gap-2 p-4">
                 <div className="min-w-0 flex-1">
-                  <Link href={`/flex-builder/${t.id}`} className="block truncate font-medium hover:underline">{t.name}</Link>
+                  <Link href={projectPath(`/flex-builder/${t.id}`)} className="block truncate font-medium hover:underline">{t.name}</Link>
                   <p className="truncate text-xs text-muted-foreground">{t.altText}</p>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <Badge variant="outline">{t.containerType}</Badge>
@@ -129,7 +130,7 @@ export function FlexTemplatesList() {
                       <Button variant="ghost" size="icon-sm" disabled={busy} aria-label="เมนู">{busy ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}</Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => router.push(`/flex-builder/${t.id}`)}><Pencil /> แก้ไข</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => router.push(projectPath(`/flex-builder/${t.id}`))}><Pencil /> แก้ไข</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => duplicate(t)}><Copy /> ทำสำเนา</DropdownMenuItem>
                       <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(t)}><Trash2 /> ลบ</DropdownMenuItem>
                     </DropdownMenuContent>

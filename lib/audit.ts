@@ -4,6 +4,7 @@ import { redact, logger } from "@/lib/logger";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 export type AuditInput = {
+  projectId?: string | null;
   userId?: string | null;
   action: string;
   entityType: string;
@@ -19,6 +20,7 @@ export async function writeAudit(input: AuditInput) {
   try {
     await prisma.auditLog.create({
       data: {
+        projectId: input.projectId ?? null,
         userId: input.userId ?? null,
         action: input.action,
         entityType: input.entityType,
@@ -34,8 +36,13 @@ export async function writeAudit(input: AuditInput) {
   }
 }
 
-/** helper สำหรับ RouteContext */
-export function auditFromCtx(ctx: { session: { user: { id: string } }; ip: string | null; userAgent: string | null }) {
+/** helper สำหรับ RouteContext (ผูกกับโปรเจกต์อัตโนมัติเมื่อเรียกจาก projectRoute) */
+export function auditFromCtx(ctx: {
+  session: { user: { id: string } };
+  ip: string | null;
+  userAgent: string | null;
+  project?: { id: string };
+}) {
   return (input: Omit<AuditInput, "userId" | "ip" | "userAgent">) =>
-    writeAudit({ ...input, userId: ctx.session.user.id, ip: ctx.ip, userAgent: ctx.userAgent });
+    writeAudit({ projectId: ctx.project?.id ?? null, ...input, userId: ctx.session.user.id, ip: ctx.ip, userAgent: ctx.userAgent });
 }

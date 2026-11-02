@@ -5,7 +5,7 @@ import { encrypt, sha256Hex } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
 import { verifyLineSignature } from "@/lib/line/signature";
 import { LINE_LIMITS } from "@/lib/line/limits";
-import { getLineCredentials } from "@/services/line-account.service";
+import { getDefaultProject, getLineCredentials } from "@/services/line-account.service";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 const eventSchema = z
@@ -38,21 +38,45 @@ export type WebhookResult =
   | { ok: false; status: number; message: string };
 
 /**
+ * หาโปรเจกต์ปลายทางของ Webhook
+ * - URL ใหม่ /api/webhook/line/{projectId}: ใช้โปรเจกต์ตาม URL
+ * - URL เดิม /api/webhook/line: หาโปรเจกต์ที่เชื่อม LINE OA ตาม "destination" ถ้าไม่พบใช้โปรเจกต์หลัก
+ * (ยังไม่เชื่อถือข้อมูลใน body จนกว่าจะตรวจลายเซ็นด้วย secret ของโปรเจกต์นั้นผ่าน)
+ */
+async function resolveWebhookProject(projectId: string | null, rawBody: string) {
+  if (projectId) return prisma.project.findUnique({ where: { id: projectId } });
+  let destination: string | null = null;
+  try {
+    const d = (JSON.parse(rawBody) as { destination?: unknown }).destination;
+    destination = typeof d === "string" && d.length <= 100 ? d : null;
+  } catch {
+    /* body ไม่ใช่ JSON — จะถูกปฏิเสธหลังตรวจลายเซ็น */
+  }
+  if (destination) {
+    const byBot = await prisma.project.findUnique({ where: { botUserId: destination } });
+    if (byBot) return byBot;
+  }
+  return getDefaultProject();
+}
+
+/**
  * รับ Webhook จาก LINE
- * 1) ตรวจสอบ X-Line-Signature กับ raw body  2) ป้องกัน Event ซ้ำด้วย webhookEventId
+ * 1) ตรวจสอบ X-Line-Signature กับ raw body ด้วย Channel secret ของโปรเจกต์  2) ป้องกัน Event ซ้ำด้วย webhookEventId
  * 3) บันทึกลงคิว (WebhookEvent) — การประมวลผลจริงทำใน Background Worker
  */
-export async function ingestWebhook(rawBody: string, signature: string | null): Promise<WebhookResult> {
+export async function ingestWebhook(projectId: string | null, rawBody: string, signature: string | null): Promise<WebhookResult> {
   if (Buffer.byteLength(rawBody) > LINE_LIMITS.WEBHOOK_BODY_MAX_BYTES) {
     return { ok: false, status: 413, message: "Payload too large" };
   }
-  const creds = await getLineCredentials({ includeToken: false });
+  const project = await resolveWebhookProject(projectId, rawBody);
+  if (!project) return { ok: false, status: 404, message: "Project not found" };
+  const creds = await getLineCredentials(project, { includeToken: false });
   if (!creds.channelSecret) {
-    logger.error("Webhook received but LINE Channel Secret is not configured");
+    logger.error("Webhook received but LINE Channel Secret is not configured", { projectId: project.id });
     return { ok: false, status: 503, message: "Channel secret is not configured" };
   }
   if (!verifyLineSignature(creds.channelSecret, rawBody, signature)) {
-    logger.warn("Rejected webhook with invalid signature");
+    logger.warn("Rejected webhook with invalid signature", { projectId: project.id });
     return { ok: false, status: 401, message: "Invalid signature" };
   }
 
@@ -63,10 +87,16 @@ export async function ingestWebhook(rawBody: string, signature: string | null): 
     return { ok: false, status: 400, message: "Invalid webhook body" };
   }
 
-  await prisma.lineAccount.update({
-    where: { id: creds.accountId },
-    data: { lastWebhookAt: new Date(), ...(parsed.destination ? { botUserId: parsed.destination } : {}) },
-  }).catch((err) => logger.warn("Failed to update lineAccount webhook info", err));
+  const botTaken =
+    parsed.destination && parsed.destination !== project.botUserId
+      ? await prisma.project.findFirst({ where: { botUserId: parsed.destination, id: { not: project.id } }, select: { id: true } })
+      : null;
+  await prisma.project
+    .update({
+      where: { id: project.id },
+      data: { lastWebhookAt: new Date(), ...(parsed.destination && !botTaken ? { botUserId: parsed.destination } : {}) },
+    })
+    .catch((err) => logger.warn("Failed to update project webhook info", err));
 
   // LINE Developers "Verify" จะส่ง events เป็น array ว่าง
   if (parsed.events.length === 0) return { ok: true, received: 0, inserted: 0, duplicates: 0 };
@@ -75,7 +105,7 @@ export async function ingestWebhook(rawBody: string, signature: string | null): 
     const { replyToken, ...rest } = event;
     const webhookEventId = event.webhookEventId ?? `hash:${sha256Hex(JSON.stringify(rest))}`;
     return {
-      lineAccountId: creds.accountId,
+      projectId: project.id,
       webhookEventId,
       type: event.type,
       mode: event.mode ?? null,
