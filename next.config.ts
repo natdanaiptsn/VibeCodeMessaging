@@ -48,6 +48,13 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  async redirects() {
+    // หน้า Dashboard และประวัติการตอบกลับถูกนำออกแล้ว — ลิงก์/บุ๊กมาร์กเดิมพาไปหน้ากล่องข้อความแทน
+    return [
+      { source: "/dashboard", destination: "/inbox", permanent: false },
+      { source: "/reply-logs", destination: "/inbox", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

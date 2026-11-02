@@ -198,7 +198,7 @@ export function LineSettingsView() {
 
   const refreshAll = () =>
     Promise.all(
-      [["line-account"], ["line-webhook"], ["line-quota"], ["dashboard"]].map((queryKey) => qc.invalidateQueries({ queryKey })),
+      [["line-account"], ["line-webhook"], ["line-quota"]].map((queryKey) => qc.invalidateQueries({ queryKey })),
     );
 
   // ตรวจรูปแบบเบื้องต้นก่อนส่ง (ช่วยจับการคัดลอกไม่ครบ / มีช่องว่าง)
@@ -664,7 +664,7 @@ export function LineSettingsView() {
                   </ChatBackdrop>
                 )}
               </li>
-              <li>ข้อความที่ส่งและคำตอบจะแสดงในหน้า “กล่องข้อความ” และ “ประวัติการตอบกลับ”</li>
+              <li>ข้อความที่ลูกค้าส่งและคำตอบของระบบจะแสดงในหน้า “กล่องข้อความ”</li>
             </Steps>
             {testRule.data && !testRule.data.autoReplyEnabled && (
               <Tip tone="warn">
@@ -695,14 +695,16 @@ export function LineSettingsView() {
               )}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm"><Link href="/inbox"><MessagesSquare /> เปิดกล่องข้อความ</Link></Button>
-                <Button asChild variant="ghost" size="sm"><Link href="/reply-logs">ดูประวัติการตอบกลับ</Link></Button>
               </div>
             </div>
             <div>
               <p className="mb-1 font-medium">ส่งข้อความแล้วไม่ได้รับคำตอบ?</p>
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
                 <li>ตรวจว่าเปิด <strong>Webhook</strong> แล้ว (ขั้นตอนที่ 4) — ถ้าหน้านี้ไม่แสดงว่าได้รับข้อความ แปลว่า LINE ยังไม่ได้ส่งมา</li>
-                <li>ได้รับข้อความแต่ไม่ตอบ: ดูหน้า <Link className="underline" href="/reply-logs">ประวัติการตอบกลับ</Link> ว่ามีข้อผิดพลาดอะไร</li>
+                <li>
+                  ได้รับข้อความแต่ไม่ตอบ: เปิดแชทนั้นในหน้า <Link className="underline" href="/inbox">กล่องข้อความ</Link> — ถ้าส่งคำตอบไม่สำเร็จ
+                  จะมีข้อความแจ้งข้อผิดพลาดสีแดงใต้ข้อความของลูกค้า หรือลองพิมพ์ข้อความเดียวกันใน <button type="button" className="underline" onClick={openTestChat}>แชททดสอบ</button> เพื่อดูว่าตรงกับกฎไหม
+                </li>
                 <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href="/settings">ตั้งค่าระบบ</Link> และพิมพ์ <Ui>test</Ui> หรือ <Ui>TestFlex</Ui> ตรงตัว (ไม่มีคำอื่นต่อท้าย)</li>
                 <li>ได้คำตอบซ้ำ 2 ข้อความ: ปิด “ข้อความตอบกลับอัตโนมัติ” ใน LINE OA Manager (ขั้นตอนที่ 4 ข้อ 3)</li>
               </ul>

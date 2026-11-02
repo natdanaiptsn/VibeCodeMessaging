@@ -61,7 +61,7 @@ function SaveSection({ section, draft, original }: { section: keyof SystemSettin
     try {
       await apiFetch("/api/settings", { method: "PUT", body: { [section]: draft[section] } });
       toast.success("บันทึกการตั้งค่าแล้ว");
-      await Promise.all([qc.invalidateQueries({ queryKey: ["settings"] }), qc.invalidateQueries({ queryKey: ["dashboard"] })]);
+      await qc.invalidateQueries({ queryKey: ["settings"] });
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
@@ -196,7 +196,7 @@ function LoggingTab({ draft, setDraft, original }: { draft: SystemSettings; setD
             </SelectContent>
           </Select>
         </SettingRow>
-        <SettingRow title="เก็บประวัติการตอบกลับ (วัน)" description="0 = เก็บถาวร">
+        <SettingRow title="เก็บบันทึกการตอบกลับ (วัน)" description="0 = เก็บถาวร">
           <Input type="number" min={0} max={3650} value={l.replyLogRetentionDays} disabled={!canManage} onChange={(e) => set({ replyLogRetentionDays: Math.max(0, Number(e.target.value) || 0) })} />
         </SettingRow>
         <SettingRow title="เก็บ Webhook Event (วัน)" description="Event ที่ประมวลผลแล้ว (ใช้ตรวจสอบย้อนหลังและป้องกัน Event ซ้ำ)">
