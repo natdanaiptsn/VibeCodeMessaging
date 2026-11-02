@@ -120,9 +120,6 @@ export function CustomerDetailSheet({ customerId, onOpenChange }: { customerId: 
                     {refresh.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />} ดึงโปรไฟล์จาก LINE
                   </Button>
                 )}
-                <Button asChild variant="ghost" size="sm">
-                  <Link href={`/reply-logs?customerId=${data.id}`}>ดูประวัติการตอบกลับ</Link>
-                </Button>
               </div>
             </div>
           )}

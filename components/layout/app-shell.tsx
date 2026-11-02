@@ -25,7 +25,7 @@ import { toast } from "sonner";
 
 function Brand() {
   return (
-    <Link href="/dashboard" className="flex items-center gap-2.5 px-2">
+    <Link href="/inbox" className="flex items-center gap-2.5 px-2">
       <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
         <MessageCircle className="size-5" fill="currentColor" />
       </span>

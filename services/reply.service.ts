@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { deterministicUuid } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
@@ -269,26 +268,4 @@ export async function sendAdminPush(params: {
     await markFailed(log.id, err);
   }
   return prisma.replyLog.findUniqueOrThrow({ where: { id: log.id } });
-}
-
-/** ส่งข้อความที่ล้มเหลวอีกครั้ง (ใช้ Push API เพราะ Reply Token ใช้ได้ครั้งเดียว) */
-export async function retryReplyLog(logId: string, ctx: { userId: string; token: string; settings: SystemSettings }) {
-  const log = await prisma.replyLog.findUnique({ where: { id: logId }, include: { customer: true } });
-  if (!log) throw badRequest("ไม่พบประวัติการตอบกลับ");
-  if (log.status !== "FAILED") throw badRequest("ส่งซ้ำได้เฉพาะรายการที่ไม่สำเร็จเท่านั้น");
-  if (!log.customer) throw badRequest("ไม่พบข้อมูลลูกค้า");
-  const messages = log.requestMessages as unknown as LineOutgoingMessage[] | null;
-  if (!Array.isArray(messages) || messages.length === 0) throw badRequest("รายการนี้ไม่มีข้อความให้ส่งซ้ำ");
-  const alreadyRetried = await prisma.replyLog.findFirst({ where: { retryOfId: log.id, status: "SUCCESS" } });
-  if (alreadyRetried) throw conflict("รายการนี้ถูกส่งซ้ำสำเร็จแล้ว");
-  return sendAdminPush({
-    customer: log.customer,
-    messages,
-    token: ctx.token,
-    userId: ctx.userId,
-    clientRequestId: randomUUID(),
-    settings: ctx.settings,
-    source: "RETRY",
-    retryOfId: log.id,
-  });
 }

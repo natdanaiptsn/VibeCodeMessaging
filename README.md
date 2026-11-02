@@ -1,6 +1,6 @@
 # LINE OA Auto Reply Manager
 
-ระบบจัดการ **LINE Official Account** แบบ Web Application สำหรับรับข้อความจากลูกค้าผ่าน LINE Webhook และ **ตอบกลับอัตโนมัติด้วย Text Message หรือ Flex Message** โดยใช้ **Keyword Matching และ Rule-based Automation** (ไม่ใช้ AI, ไม่ใช้ Botnoi หรือแพลตฟอร์ม Chatbot สำเร็จรูป) พร้อมหน้า Dashboard สำหรับจัดการทุกอย่างในที่เดียว
+ระบบจัดการ **LINE Official Account** แบบ Web Application สำหรับรับข้อความจากลูกค้าผ่าน LINE Webhook และ **ตอบกลับอัตโนมัติด้วย Text Message หรือ Flex Message** โดยใช้ **Keyword Matching และ Rule-based Automation** (ไม่ใช้ AI, ไม่ใช้ Botnoi หรือแพลตฟอร์ม Chatbot สำเร็จรูป) พร้อมหน้าเว็บสำหรับจัดการทุกอย่างในที่เดียว
 
 ---
 
@@ -28,13 +28,11 @@
 
 | เมนู | ความสามารถ |
 |---|---|
-| **Dashboard** | ข้อความที่ได้รับวันนี้, ตอบกลับสำเร็จ/ไม่สำเร็จ, ลูกค้าทั้งหมด, กฎที่เปิดใช้งาน, กราฟสถิติรายวัน 14 วัน (มีมุมมองตาราง), ข้อความล่าสุด, สถานะการเชื่อมต่อ LINE OA และคิวประมวลผล |
 | **กล่องข้อความ (Inbox)** | รายการแชท, ค้นหาลูกค้า/ข้อความ, กรองตามวันที่และประเภทข้อความ, ประวัติข้อความรายคน (รูปภาพ/สติกเกอร์/ตำแหน่ง/Postback/Flex), สถานะการตอบกลับ, **ส่งข้อความโดย Admin** (ข้อความ, Text Template, Flex Message) พร้อมกันส่งซ้ำ, อัปเดตอัตโนมัติทุก 5 วินาที |
 | **ลูกค้า** | รายชื่อลูกค้า, สถานะติดตาม/บล็อก, สถิติ, โน้ตภายใน, ดึงโปรไฟล์จาก LINE |
 | **ระบบตอบกลับอัตโนมัติ** | เพิ่ม/แก้ไข/ลบ/เปิด-ปิด/ทำสำเนากฎ, Keyword หลายคำ (AND/OR), Exact / Contains / Starts With / Ends With / Regular Expression (ป้องกัน ReDoS), Priority, ทริกเกอร์ตามเหตุการณ์ (ข้อความ, Postback, เพิ่มเพื่อน, รูปภาพ, สติกเกอร์, ตำแหน่ง), เครื่องมือทดสอบข้อความ |
 | **Text Message** | สร้าง/แก้ไข/ลบข้อความ, Preview แบบแชท LINE, บันทึกเป็น Template ใหม่, ตัวแปร Dynamic `{{displayName}} {{userId}} {{date}} {{time}} {{datetime}}` |
 | **Flex Message Builder** | Visual Builder 3 ส่วน (Component Panel / Editor Canvas / Live Preview), Drag & Drop, Bubble และ Carousel, Box / Text / Image / Button / Separator / Spacer, กำหนดสี ขนาดตัวอักษร ระยะห่าง Alignment Background (รวม Gradient) Border Action URL และ Postback, Duplicate / ลบ / Undo-Redo, อัปโหลดรูป, เทมเพลตเริ่มต้น, บันทึก/โหลด Template, นำเข้า/Export JSON, Validate ตาม LINE Spec และตรวจสอบกับ LINE API จริง |
-| **ประวัติการตอบกลับ** | วันเวลา, ลูกค้า, ข้อความต้นทาง, กฎที่ใช้, รูปแบบ, ผลการส่ง (Pending/Processing/Success/Failed), Error, LINE API Response ที่จำเป็น, ค้นหา/กรอง, ส่งซ้ำด้วย Push API |
 | **LINE OA Settings** | คู่มือเชื่อมต่อ 5 ขั้นตอนในหน้าเว็บ, ใช้แค่ Channel ID + Channel secret (ขอ Access token ให้อัตโนมัติ), ปุ่มเชื่อมต่อคลิกเดียว (ตั้ง Webhook + ทดสอบให้เอง), ตรวจสถานะ Webhook, ลิงก์เพิ่มเพื่อน, โควตาข้อความ |
 | **ตั้งค่าระบบ** | เปิด/ปิด Auto Reply, พฤติกรรมเมื่อพบหลายกฎ, Push fallback, Timezone (ค่าเริ่มต้น Asia/Bangkok), Default Reply (+cooldown), ระบบ Log และระยะเวลาเก็บข้อมูล, เปลี่ยนรหัสผ่าน, จัดการผู้ใช้และสิทธิ์, Audit Log |
 | **แชททดสอบ** (ปุ่มหุ่นยนต์มุมขวาล่าง ทุกหน้า) | พิมพ์เหมือนลูกค้าใน LINE แล้วเห็นคำตอบทันที (Text / Flex) พร้อมบอกว่าตรงกับกฎไหน, จำลองส่งรูป/สติกเกอร์/ตำแหน่ง/เพิ่มเพื่อน, กดปุ่มในการ์ด Flex ได้ — ใช้กฎชุดเดียวกับของจริงแต่ **ไม่ส่งข้อความถึง LINE และไม่ใช้โควตา** |
@@ -57,7 +55,7 @@ flowchart LR
   E --> R[Reply Service]
   R -->|Reply API / Push API + Retry Key| LP
   R -->|ReplyLog / ข้อความขาออก| DB
-  A[Admin Dashboard<br/>Next.js App Router] -->|Route Handlers + Zod| DB
+  A[Admin Web<br/>Next.js App Router] -->|Route Handlers + Zod| DB
 ```
 
 ### ลำดับการประมวลผลข้อความ
@@ -88,7 +86,7 @@ flowchart LR
 
 | ส่วน | เทคโนโลยี |
 |---|---|
-| Frontend | Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS v4, shadcn/ui (Radix UI), Lucide Icons, TanStack Query, Recharts, dnd-kit, Sonner |
+| Frontend | Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS v4, shadcn/ui (Radix UI), Lucide Icons, TanStack Query, dnd-kit, Sonner |
 | Backend | Next.js Route Handlers (Node.js runtime), LINE Messaging API, LINE Webhook, Queue บน PostgreSQL |
 | Database | PostgreSQL 16, Prisma ORM 7 (`@prisma/adapter-pg`), pg_trgm สำหรับค้นหาข้อความ |
 | Validation | Zod 4 + ตัวตรวจสอบ Flex Message ตาม LINE Spec |
@@ -102,22 +100,22 @@ flowchart LR
 
 ```
 app/
-  (dashboard)/            หน้า Dashboard ทั้งหมด (ต้องเข้าสู่ระบบ)
-    dashboard/ inbox/ customers/ auto-reply/ text-messages/
-    flex-builder/ reply-logs/ line-settings/ settings/
+  (dashboard)/            หน้าจัดการทั้งหมด (ต้องเข้าสู่ระบบ)
+    inbox/ customers/ auto-reply/ text-messages/
+    flex-builder/ line-settings/ settings/
   login/                  หน้าเข้าสู่ระบบ
   api/
     webhook/line/         ★ LINE Webhook Endpoint
-    auth/ dashboard/ conversations/ customers/ messages/ rules/
-    text-templates/ flex-templates/ media/ reply-logs/ line/
+    auth/ conversations/ customers/ messages/ rules/
+    text-templates/ flex-templates/ media/ line/
     settings/ users/ audit-logs/ health/
 components/
   ui/                     shadcn/ui components
   layout/ common/         Sidebar, สถานะ Loading/Empty/Error ฯลฯ
-  dashboard/ inbox/ customers/ auto-reply/ text-messages/
+  inbox/ customers/ auto-reply/ text-messages/ test-chat/
   flex/                   Flex Message Preview renderer
   flex-builder/           Visual Flex Message Builder (model, canvas, inspector)
-  reply-logs/ line-settings/ settings/
+  line-settings/ settings/
 lib/
   api/handler.ts          Route wrapper: Auth, สิทธิ์, CSRF, Rate limit, Error handling
   auth/                   Session, Password, Permissions
@@ -136,7 +134,7 @@ services/
   reply.service.ts                    ส่งข้อความ + บันทึกผล
   text-template.service.ts flex-message.service.ts
   customer.service.ts message.service.ts rule.service.ts
-  settings.service.ts line-account.service.ts dashboard.service.ts maintenance.service.ts
+  settings.service.ts line-account.service.ts maintenance.service.ts
 hooks/                    useApiQuery / useApiMutation, useDebounce, App context
 prisma/
   schema.prisma  migrations/  seed.ts
@@ -159,7 +157,7 @@ proxy.ts                  Redirect ไปหน้า Login เมื่อไ�
 | `WebhookEvent` | คิว + ป้องกัน Event ซ้ำ (`webhookEventId` unique) |
 | `ReplyRule`, `ReplyKeyword` | กฎตอบกลับและ Keyword |
 | `ReplyTemplate`, `FlexTemplate` | Text Template และ Flex Template |
-| `ReplyLog` | ประวัติการตอบกลับ (`webhookEventId` unique กันตอบซ้ำ, `retryKey` unique กัน Push ซ้ำ) |
+| `ReplyLog` | บันทึกการตอบกลับเบื้องหลัง — แสดงสถานะ/ข้อผิดพลาดใต้ข้อความใน Inbox (`webhookEventId` unique กันตอบซ้ำ, `retryKey` unique กัน Push ซ้ำ) |
 | `SystemSetting` | การตั้งค่าระบบ (key-value ตรวจสอบด้วย Zod) |
 | `AuditLog` | บันทึกการแก้ไขกฎ/การตั้งค่า/การเข้าสู่ระบบ |
 | `MediaAsset` | รูปภาพที่อัปโหลดสำหรับ Flex Message |
@@ -361,8 +359,8 @@ https://<โดเมนของคุณ>/api/webhook/line
 | บทบาท | สิทธิ์ |
 |---|---|
 | OWNER | ทุกอย่าง รวมถึง LINE Credentials, จัดการผู้ใช้, Audit Log |
-| ADMIN | จัดการกฎ, Template, Flex, ตั้งค่าระบบ, ดูประวัติ/ส่งซ้ำ |
-| AGENT | Dashboard, Inbox (ส่งข้อความ), ลูกค้า, ดูกฎ/Template |
+| ADMIN | จัดการกฎ, Template, Flex, ตั้งค่าระบบ |
+| AGENT | Inbox (ส่งข้อความ), ลูกค้า, ดูกฎ/Template, แชททดสอบ |
 
 ---
 
@@ -596,7 +594,7 @@ Unit tests ครอบคลุม: การตรวจลายเซ็น 
 npx tsx scripts/simulate-webhook.ts --text "ราคา" --url http://localhost:3000
 ```
 
-(ต้องตั้ง `LINE_CHANNEL_SECRET` ให้ตรงกับระบบ — ข้อความจะถูกรับ บันทึก และจับคู่กฎ; การตอบกลับจริงจะล้มเหลวเพราะ Reply Token เป็นค่าจำลอง ซึ่งจะเห็นได้ในหน้า **ประวัติการตอบกลับ**)
+(ต้องตั้ง `LINE_CHANNEL_SECRET` ให้ตรงกับระบบ — ข้อความจะถูกรับ บันทึก และจับคู่กฎ; การตอบกลับจริงจะล้มเหลวเพราะ Reply Token เป็นค่าจำลอง ซึ่งจะเห็นข้อผิดพลาดใต้ข้อความในหน้า **กล่องข้อความ**)
 
 ---
 
@@ -606,7 +604,7 @@ npx tsx scripts/simulate-webhook.ts --text "ราคา" --url http://localhost
 |---|---|
 | LINE Verify ได้ 503 | ยังไม่ได้ตั้งค่า Channel Secret |
 | LINE Verify ได้ 401 | Channel Secret ไม่ตรงกับ Channel ที่ตั้ง Webhook |
-| ข้อความเข้าแต่ไม่ตอบกลับ | ตรวจหน้า ประวัติการตอบกลับ / สถานะข้อความใน Inbox: ไม่มีกฎที่ตรง, ปิด Auto Reply, ยังไม่ตั้ง Access Token, หรือ Channel อยู่โหมด standby |
+| ข้อความเข้าแต่ไม่ตอบกลับ | ดูสถานะ/ข้อผิดพลาดใต้ข้อความในหน้ากล่องข้อความ หรือพิมพ์ข้อความเดียวกันในแชททดสอบ: ไม่มีกฎที่ตรง, ปิด Auto Reply, ยังไม่ตั้ง Access Token, หรือ Channel อยู่โหมด standby |
 | `Invalid reply token` | ประมวลผลช้าเกิน/ใช้ซ้ำ — เปิด *Push fallback* ในตั้งค่าระบบหากต้องการ |
 | LINE ตอบซ้ำ 2 ข้อความ | ปิด Auto-response messages ใน LINE Official Account Manager |
 | รูปใน Flex ไม่แสดงใน LINE | URL ต้องเป็น HTTPS ที่ LINE เข้าถึงได้ (ตั้ง `APP_URL` เป็น HTTPS เมื่อใช้รูปที่อัปโหลด) |

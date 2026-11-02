@@ -4,7 +4,6 @@ export type Role = "OWNER" | "ADMIN" | "AGENT";
 const ROLE_LEVEL: Record<Role, number> = { AGENT: 1, ADMIN: 2, OWNER: 3 };
 
 export const PERMISSIONS = {
-  "dashboard:view": "AGENT",
   "inbox:view": "AGENT",
   "inbox:send": "AGENT",
   "customers:view": "AGENT",
@@ -15,8 +14,6 @@ export const PERMISSIONS = {
   "templates:manage": "ADMIN",
   "flex:manage": "ADMIN",
   "media:upload": "ADMIN",
-  "logs:view": "ADMIN",
-  "logs:retry": "ADMIN",
   "settings:view": "ADMIN",
   "settings:manage": "ADMIN",
   "line:view": "ADMIN",
