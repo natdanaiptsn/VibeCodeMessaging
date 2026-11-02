@@ -210,7 +210,7 @@ function RuleFormBody({
           </div>
 
           {usesKeywords ? (
-            <div className="grid gap-4 rounded-lg border bg-gray-50/60 p-3">
+            <div className="grid gap-4 rounded-lg border bg-gray-50/60 dark:bg-white/5 p-3">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="เงื่อนไขการจับคู่" error={errors.matchType}>
                   <Select value={form.matchType} onValueChange={(v) => set({ matchType: v })}>
@@ -255,7 +255,7 @@ function RuleFormBody({
               </label>
             </div>
           ) : (
-            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            <p className="rounded-lg bg-blue-50 dark:bg-blue-500/15 px-3 py-2 text-sm text-blue-800 dark:text-blue-200">
               กฎนี้จะทำงานทุกครั้งที่เกิดเหตุการณ์ “{TRIGGER_LABELS[form.triggerType]}” โดยไม่ต้องใช้ Keyword
             </p>
           )}

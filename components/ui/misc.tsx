@@ -25,7 +25,7 @@ export function Separator({
 }
 
 export function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="skeleton" className={cn("animate-pulse rounded-md bg-gray-200/70", className)} {...props} />;
+  return <div data-slot="skeleton" className={cn("animate-pulse rounded-md bg-gray-200/70 dark:bg-white/15", className)} {...props} />;
 }
 
 export function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
@@ -59,7 +59,7 @@ export function TooltipContent({ className, sideOffset = 4, ...props }: React.Co
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
-        className={cn("z-50 max-w-xs rounded-md bg-gray-900 px-3 py-1.5 text-xs text-white shadow animate-in fade-in-0", className)}
+        className={cn("z-50 max-w-xs rounded-md bg-gray-900 px-3 py-1.5 text-xs text-white dark:bg-gray-700 shadow animate-in fade-in-0", className)}
         {...props}
       />
     </TooltipPrimitive.Portal>

@@ -47,9 +47,9 @@ export function Composer({ customerId, disabled, onSent }: { customerId: string;
   };
 
   return (
-    <div className="border-t bg-white p-3">
+    <div className="border-t bg-card p-3">
       {disabled ? (
-        <p className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-500/15 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
           <Info className="size-4 shrink-0" /> ลูกค้าเลิกติดตามหรือบล็อกบัญชี จึงไม่สามารถส่งข้อความได้
         </p>
       ) : (
@@ -96,7 +96,7 @@ export function Composer({ customerId, disabled, onSent }: { customerId: string;
           </div>
           <p className="text-[11px] text-muted-foreground">
             การส่งโดยแอดมินใช้ LINE Push API ซึ่งนับรวมในโควตาข้อความรายเดือนของ LINE OA
-            {mode === "text" && text.length > 4500 && <span className="ml-1 text-amber-600">({text.length}/5000)</span>}
+            {mode === "text" && text.length > 4500 && <span className="ml-1 text-amber-600 dark:text-amber-300">({text.length}/5000)</span>}
           </p>
         </div>
       )}

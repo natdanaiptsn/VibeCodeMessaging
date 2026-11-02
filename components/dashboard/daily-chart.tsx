@@ -24,7 +24,7 @@ function dayLabel(day: string) {
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number }[]; label?: string }) {
   if (!active || !payload?.length || !label) return null;
   return (
-    <div className="rounded-lg border bg-white px-3 py-2 text-xs shadow-md">
+    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
       <p className="mb-1.5 font-medium text-foreground">{dayLabel(label)}</p>
       {SERIES.map((s) => {
         const v = payload.find((p) => p.dataKey === s.key)?.value ?? 0;
@@ -62,17 +62,17 @@ export function DailyChart({ data }: { data: Point[] }) {
         <div className="h-64 w-full" role="img" aria-label="กราฟสถิติข้อความรายวัน 14 วันล่าสุด">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-              <CartesianGrid stroke="#eef0f2" vertical={false} />
+              <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
               <XAxis
                 dataKey="day"
                 tickFormatter={dayLabel}
-                tick={{ fontSize: 11, fill: "#6b7280" }}
+                tick={{ fontSize: 11, fill: "var(--chart-axis)" }}
                 axisLine={false}
                 tickLine={false}
                 minTickGap={16}
               />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} />
-              <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#9ca3af", strokeDasharray: "3 3" }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--chart-axis)" }} axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTooltip />} cursor={{ stroke: "var(--chart-axis)", strokeDasharray: "3 3" }} />
               {SERIES.map((s) => (
                 <Line
                   key={s.key}
@@ -82,7 +82,7 @@ export function DailyChart({ data }: { data: Point[] }) {
                   stroke={s.color}
                   strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4, strokeWidth: 2, stroke: "#ffffff" }}
+                  activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
                   isAnimationActive={false}
                 />
               ))}

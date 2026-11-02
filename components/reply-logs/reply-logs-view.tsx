@@ -105,13 +105,13 @@ function LogDetailSheet({ id, onClose }: { id: string | null; onClose: () => voi
               {data.sourceMessage && (
                 <div>
                   <p className="mb-1 text-xs text-muted-foreground">ข้อความต้นทาง ({MESSAGE_TYPE_LABELS[data.sourceMessage.type]})</p>
-                  <p className="rounded-md bg-gray-50 px-3 py-2 text-sm whitespace-pre-wrap">{data.sourceMessage.text ?? "-"}</p>
+                  <p className="rounded-md bg-gray-50 dark:bg-white/5 px-3 py-2 text-sm whitespace-pre-wrap">{data.sourceMessage.text ?? "-"}</p>
                 </div>
               )}
               {data.errorMessage && (
                 <div>
                   <p className="mb-1 text-xs text-muted-foreground">Error Message</p>
-                  <p className="rounded-md bg-red-50 px-3 py-2 text-sm whitespace-pre-wrap text-red-700">{data.errorMessage}</p>
+                  <p className="rounded-md bg-red-50 dark:bg-red-500/15 px-3 py-2 text-sm whitespace-pre-wrap text-red-700 dark:text-red-300">{data.errorMessage}</p>
                 </div>
               )}
               {data.requestMessages && data.requestMessages.length > 0 && (
@@ -141,8 +141,8 @@ function LogDetailSheet({ id, onClose }: { id: string | null; onClose: () => voi
                 </div>
               )}
               {canRetry && data.status === "FAILED" && data.requestMessages && data.requestMessages.length > 0 && !data.retries.some((r) => r.status === "SUCCESS") && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-                  <p className="mb-2 text-amber-800">ส่งซ้ำด้วย Push API (Reply Token ใช้ได้ครั้งเดียว) — นับรวมในโควตาข้อความ</p>
+                <div className="rounded-lg border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/15 p-3 text-sm">
+                  <p className="mb-2 text-amber-800 dark:text-amber-200">ส่งซ้ำด้วย Push API (Reply Token ใช้ได้ครั้งเดียว) — นับรวมในโควตาข้อความ</p>
                   <Button size="sm" onClick={() => retry.mutate()} disabled={retry.isPending || data.customer === null}>
                     {retry.isPending ? <Loader2 className="animate-spin" /> : <RotateCcw />} ส่งซ้ำ
                   </Button>

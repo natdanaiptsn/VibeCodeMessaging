@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* LINE OA Auto Reply Manager — โทนสีหลักเขียว LINE (#06C755) บนพื้นขาว/เทาอ่อน */
 :root {
@@ -38,6 +38,52 @@
   --chart-3: #ef4444;
   --chart-4: #f59e0b;
   --chart-5: #8b5cf6;
+  --chart-grid: #eef0f2;
+  --chart-axis: #6b7280;
+  --chat-bg: #eef1f5;
+  --chat-bubble: #ffffff;
+  --chat-bubble-foreground: #111827;
+  --line-backdrop: #8cabd9e6;
+  --scrollbar: #d1d5db;
+}
+
+/* โหมดมืด — เปิดด้วย class "dark" ที่ <html> (ปุ่มสลับธีมที่แถบเมนู) */
+.dark {
+  color-scheme: dark;
+  --background: #0d1117;
+  --foreground: #e6e8eb;
+  --card: #151b23;
+  --card-foreground: #e6e8eb;
+  --popover: #1a212b;
+  --popover-foreground: #e6e8eb;
+  --primary: #06c755;
+  --primary-foreground: #ffffff;
+  --primary-hover: #10d862;
+  --secondary: #222a35;
+  --secondary-foreground: #e6e8eb;
+  --muted: #1d242e;
+  --muted-foreground: #9aa4b2;
+  --accent: #10301f;
+  --accent-foreground: #7ce3a5;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --border: #29313d;
+  --input: #343e4b;
+  --ring: #06c755;
+  --sidebar: #11161d;
+  --sidebar-foreground: #c9d1db;
+  --sidebar-accent: #10301f;
+  --sidebar-accent-foreground: #7ce3a5;
+  --sidebar-border: #232a34;
+  --chart-grid: #232b36;
+  --chart-axis: #8b95a3;
+  --chat-bg: #10161d;
+  --chat-bubble: #262e39;
+  --chat-bubble-foreground: #e6e8eb;
+  --line-backdrop: #26344a;
+  --scrollbar: #3a4452;
 }
 
 @theme inline {
@@ -74,6 +120,10 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
   --color-line: #06c755;
+  --color-chat-bg: var(--chat-bg);
+  --color-chat-bubble: var(--chat-bubble);
+  --color-chat-bubble-foreground: var(--chat-bubble-foreground);
+  --color-line-backdrop: var(--line-backdrop);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -101,5 +151,5 @@
 /* Scrollbar ที่บางลงสำหรับพาเนล */
 .thin-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
+  scrollbar-color: var(--scrollbar) transparent;
 }

@@ -4,6 +4,7 @@
  * แสดงตัวอย่าง Flex Message แบบใกล้เคียงกับการแสดงผลบนแอป LINE
  * - ไม่สร้างลิงก์จริงจาก action (ป้องกัน javascript: / URL อันตราย) — แสดงเป็น title เท่านั้น
  * - รองรับการเลือก component (ใช้ใน Flex Builder) ผ่าน key "__id"
+ * - ส่ง onAction เพื่อให้กดปุ่ม/พื้นที่ที่มี action ได้ (ใช้ในแชททดสอบ) — ผู้เรียกเป็นผู้ตัดสินว่าจะทำอะไรกับ action
  */
 import type { CSSProperties, ReactNode } from "react";
 import { ImageOff, Play } from "lucide-react";
@@ -72,10 +73,34 @@ function describeAction(action: unknown): string | undefined {
   }
 }
 
+export type FlexAction = Record<string, unknown> & { type?: unknown };
+
 type Ctx = {
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  onAction?: (action: FlexAction) => void;
 };
+
+/** ทำให้ component ที่มี action กดได้ (เฉพาะเมื่อมี onAction และไม่ได้อยู่ในโหมดเลือกของ Builder) */
+function actionable(action: unknown, ctx: Ctx) {
+  if (!ctx.onAction || ctx.onSelect || !action || typeof action !== "object" || !(action as Json).type) return {};
+  const run = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    ctx.onAction?.(action as FlexAction);
+  };
+  return {
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: run,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        run(e);
+      }
+    },
+    className: "cursor-pointer transition hover:brightness-95 active:brightness-90 focus-visible:outline-2 focus-visible:outline-sky-500",
+  };
+}
 
 function selectable(node: Json, ctx: Ctx) {
   const id = typeof node.__id === "string" ? node.__id : null;
@@ -163,7 +188,7 @@ function renderComponent(node: unknown, parentLayout: string | null, ctx: Ctx, k
       };
       const spacing = px(n.spacing, SPACING);
       return (
-        <div key={key} style={compact(style)} title={title} {...sel}>
+        <div key={key} style={compact(style)} title={title} {...sel} {...actionable(n.action, ctx)}>
           {contents.length === 0 && ctx.onSelect ? (
             <div className="flex min-h-8 flex-1 items-center justify-center border border-dashed border-gray-300 text-[10px] text-gray-400">
               box ว่าง
@@ -201,7 +226,7 @@ function renderComponent(node: unknown, parentLayout: string | null, ctx: Ctx, k
       };
       const spans = Array.isArray(n.contents) ? (n.contents as Json[]) : null;
       return (
-        <div key={key} style={compact(style)} title={title} {...sel}>
+        <div key={key} style={compact(style)} title={title} {...sel} {...actionable(n.action, ctx)}>
           {spans && spans.length
             ? spans.map((s, i) => (
                 <span
@@ -227,7 +252,7 @@ function renderComponent(node: unknown, parentLayout: string | null, ctx: Ctx, k
       const [w, h] = typeof n.aspectRatio === "string" ? n.aspectRatio.split(":").map(Number) : [1, 1];
       const align = n.align === "start" ? "flex-start" : n.align === "end" ? "flex-end" : "center";
       return (
-        <div key={key} style={{ ...base, display: "flex", justifyContent: align, alignSelf: gravity(n.gravity) }} title={title} {...sel}>
+        <div key={key} style={{ ...base, display: "flex", justifyContent: align, alignSelf: gravity(n.gravity) }} title={title} {...sel} {...actionable(n.action, ctx)}>
           <div
             style={{
               width,
@@ -291,6 +316,7 @@ function renderComponent(node: unknown, parentLayout: string | null, ctx: Ctx, k
           }}
           title={describeAction(action)}
           {...sel}
+          {...actionable(action, ctx)}
         >
           <span className="truncate">{String(action.label ?? "ปุ่ม")}</span>
         </div>
@@ -344,13 +370,15 @@ function Bubble({ bubble, ctx }: { bubble: Json; ctx: Ctx }) {
   const styles = (bubble.styles ?? {}) as Record<string, Json>;
   const blocks = ["header", "hero", "body", "footer"].filter((b) => bubble[b]);
   const sel = selectable(bubble, ctx);
+  const act = actionable(bubble.action, ctx);
   return (
     <div
       dir={bubble.direction === "rtl" ? "rtl" : "ltr"}
       style={{ width, maxWidth: "100%" }}
       title={describeAction(bubble.action)}
       {...sel}
-      className={cn("flex shrink-0 flex-col overflow-hidden rounded-[17px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]", sel.className)}
+      {...act}
+      className={cn("flex shrink-0 flex-col overflow-hidden rounded-[17px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)]", sel.className, act.className)}
     >
       {blocks.map((block, i) => {
         const st = styles[block] ?? {};
@@ -379,14 +407,16 @@ export function FlexPreview({
   contents,
   selectedId,
   onSelect,
+  onAction,
   className,
 }: {
   contents: unknown;
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  onAction?: (action: FlexAction) => void;
   className?: string;
 }) {
-  const ctx: Ctx = { selectedId, onSelect };
+  const ctx: Ctx = { selectedId, onSelect, onAction };
   if (!contents || typeof contents !== "object") {
     return <p className="text-sm text-muted-foreground">ไม่มีข้อมูล Flex Message</p>;
   }
@@ -413,5 +443,5 @@ export function FlexPreview({
 
 /** พื้นหลังจำลองหน้าแชท LINE */
 export function ChatBackdrop({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("rounded-xl bg-[#8cabd9]/90 p-3 sm:p-4", className)}>{children}</div>;
+  return <div className={cn("rounded-xl bg-line-backdrop p-3 sm:p-4", className)}>{children}</div>;
 }

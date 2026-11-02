@@ -9,7 +9,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   );
 }
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
-  return <thead data-slot="table-header" className={cn("bg-gray-50 [&_tr]:border-b", className)} {...props} />;
+  return <thead data-slot="table-header" className={cn("bg-gray-50 dark:bg-white/5 [&_tr]:border-b", className)} {...props} />;
 }
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
   return <tbody data-slot="table-body" className={cn("[&_tr:last-child]:border-0", className)} {...props} />;
@@ -18,7 +18,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       data-slot="table-row"
-      className={cn("border-b transition-colors hover:bg-gray-50/70 data-[state=selected]:bg-muted", className)}
+      className={cn("border-b transition-colors hover:bg-gray-50/70 dark:hover:bg-white/5 data-[state=selected]:bg-muted", className)}
       {...props}
     />
   );
@@ -27,7 +27,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
-      className={cn("h-10 px-3 text-left align-middle text-xs font-semibold whitespace-nowrap text-gray-600", className)}
+      className={cn("h-10 px-3 text-left align-middle text-xs font-semibold whitespace-nowrap text-gray-600 dark:text-gray-400", className)}
       {...props}
     />
   );

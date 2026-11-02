@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/current-user";
 import { LoginForm } from "@/components/auth/login-form";
 import { Providers } from "@/components/providers";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 export const metadata: Metadata = { title: "เข้าสู่ระบบ" };
 
@@ -13,7 +14,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (session) redirect(safeNext);
   return (
     <Providers>
-      <div className="flex min-h-dvh items-center justify-center bg-gradient-to-br from-[#e9f9ef] via-white to-gray-50 p-4">
+      <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-[#e9f9ef] via-white to-gray-50 p-4 dark:from-[#0f2418] dark:via-background dark:to-background">
+        <ThemeToggle className="absolute top-4 right-4 w-52 bg-card/70" />
         <LoginForm next={safeNext} />
       </div>
     </Providers>

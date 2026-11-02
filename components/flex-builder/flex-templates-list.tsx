@@ -82,7 +82,7 @@ export function FlexTemplatesList() {
           <p className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Sparkles className="size-4 text-primary" /> เริ่มจากเทมเพลต</p>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {FLEX_PRESETS.map((p) => (
-              <Link key={p.key} href={`/flex-builder/new?preset=${p.key}`} className="rounded-xl border bg-white p-3 transition hover:border-primary hover:shadow-sm">
+              <Link key={p.key} href={`/flex-builder/new?preset=${p.key}`} className="rounded-xl border bg-card p-3 transition hover:border-primary hover:shadow-sm">
                 <p className="text-sm font-medium">{p.name}</p>
                 <p className="text-xs text-muted-foreground">{p.description}</p>
               </Link>

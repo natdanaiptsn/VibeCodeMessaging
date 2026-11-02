@@ -39,7 +39,7 @@ function Content({ m }: { m: ThreadMessage }) {
             src={`/api/messages/${m.id}/content`}
             alt="รูปภาพจากลูกค้า"
             loading="lazy"
-            className="max-h-64 max-w-full rounded-lg bg-gray-100 object-contain"
+            className="max-h-64 max-w-full rounded-lg bg-gray-100 dark:bg-white/10 object-contain"
             onError={(e) => ((e.currentTarget as HTMLImageElement).alt = "ไม่สามารถโหลดรูปภาพ (ไฟล์อาจหมดอายุใน LINE แล้ว)")}
           />
         </a>
@@ -54,10 +54,10 @@ function Content({ m }: { m: ThreadMessage }) {
       const ok = Number.isFinite(lat) && Number.isFinite(lng);
       return (
         <div className="text-sm">
-          <p className="flex items-center gap-1 font-medium"><MapPin className="size-4 text-red-500" /> {String(p.title ?? "ตำแหน่ง")}</p>
+          <p className="flex items-center gap-1 font-medium"><MapPin className="size-4 text-red-500 dark:text-red-400" /> {String(p.title ?? "ตำแหน่ง")}</p>
           {typeof p.address === "string" && <p className="text-xs opacity-80">{p.address}</p>}
           {ok && (
-            <a className="mt-1 inline-block text-xs text-blue-600 underline" href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noopener noreferrer">
+            <a className="mt-1 inline-block text-xs text-blue-600 dark:text-blue-300 underline" href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noopener noreferrer">
               เปิดแผนที่ ({lat.toFixed(5)}, {lng.toFixed(5)})
             </a>
           )}
@@ -97,7 +97,7 @@ export function MessageBubble({ m, timezone }: { m: ThreadMessage; timezone: str
   if (m.type === "FOLLOW" || m.type === "UNFOLLOW") {
     return (
       <div className="flex justify-center py-1">
-        <span className="flex items-center gap-1.5 rounded-full bg-gray-200/80 px-3 py-1 text-xs text-gray-600">
+        <span className="flex items-center gap-1.5 rounded-full bg-gray-200/80 dark:bg-white/15 px-3 py-1 text-xs text-gray-600 dark:text-gray-400">
           {m.type === "FOLLOW" ? <UserPlus className="size-3.5" /> : <UserMinus className="size-3.5" />}
           {m.type === "FOLLOW" ? "ลูกค้าเพิ่มเพื่อน / ปลดบล็อก" : "ลูกค้าเลิกติดตาม / บล็อก"} · {formatTime(m.timestamp, timezone)}
         </span>
@@ -113,7 +113,7 @@ export function MessageBubble({ m, timezone }: { m: ThreadMessage; timezone: str
         className={cn(
           "max-w-[85%] sm:max-w-[70%]",
           !plain && "rounded-2xl px-3.5 py-2 shadow-xs",
-          !plain && (outbound ? "rounded-tr-sm bg-[#06c755] text-white" : "rounded-tl-sm bg-white text-gray-900"),
+          !plain && (outbound ? "rounded-tr-sm bg-[#06c755] text-white" : "rounded-tl-sm bg-chat-bubble text-chat-bubble-foreground"),
         )}
       >
         <Content m={m} />
@@ -129,7 +129,7 @@ export function MessageBubble({ m, timezone }: { m: ThreadMessage; timezone: str
         {!outbound && reply?.ruleName && <span>· {reply.ruleName}</span>}
       </div>
       {!outbound && reply?.status === "FAILED" && reply.errorMessage && (
-        <p className="max-w-[85%] rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700 sm:max-w-[70%]">{reply.errorMessage}</p>
+        <p className="max-w-[85%] rounded-md bg-red-50 dark:bg-red-500/15 px-2 py-1 text-[11px] text-red-700 dark:text-red-300 sm:max-w-[70%]">{reply.errorMessage}</p>
       )}
     </div>
   );
