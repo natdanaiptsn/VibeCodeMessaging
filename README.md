@@ -12,8 +12,8 @@
 4. [โครงสร้างโปรเจกต์](#โครงสร้างโปรเจกต์)
 5. [การติดตั้ง (Development)](#การติดตั้ง-development)
 6. [Environment Variables](#environment-variables)
-7. [วิธีตั้งค่า LINE Developers](#วิธีตั้งค่า-line-developers)
-8. [วิธีตั้งค่า Webhook](#วิธีตั้งค่า-webhook)
+7. [วิธีเชื่อมต่อ LINE OA](#วิธีเชื่อมต่อ-line-oa)
+8. [Webhook URL](#webhook-url)
 9. [คู่มือการใช้งาน](#คู่มือการใช้งาน)
 10. [วิธี Deploy (Production)](#วิธี-deploy-production) — Docker / Node.js / Vercel
 11. [วิธี Backup / Restore Database](#วิธี-backup--restore-database)
@@ -35,7 +35,7 @@
 | **Text Message** | สร้าง/แก้ไข/ลบข้อความ, Preview แบบแชท LINE, บันทึกเป็น Template ใหม่, ตัวแปร Dynamic `{{displayName}} {{userId}} {{date}} {{time}} {{datetime}}` |
 | **Flex Message Builder** | Visual Builder 3 ส่วน (Component Panel / Editor Canvas / Live Preview), Drag & Drop, Bubble และ Carousel, Box / Text / Image / Button / Separator / Spacer, กำหนดสี ขนาดตัวอักษร ระยะห่าง Alignment Background (รวม Gradient) Border Action URL และ Postback, Duplicate / ลบ / Undo-Redo, อัปโหลดรูป, เทมเพลตเริ่มต้น, บันทึก/โหลด Template, นำเข้า/Export JSON, Validate ตาม LINE Spec และตรวจสอบกับ LINE API จริง |
 | **ประวัติการตอบกลับ** | วันเวลา, ลูกค้า, ข้อความต้นทาง, กฎที่ใช้, รูปแบบ, ผลการส่ง (Pending/Processing/Success/Failed), Error, LINE API Response ที่จำเป็น, ค้นหา/กรอง, ส่งซ้ำด้วย Push API |
-| **LINE OA Settings** | Channel ID / Secret / Access Token (เข้ารหัส), Webhook URL, ตั้งค่า Webhook ไปยัง LINE, ทดสอบการเชื่อมต่อ, ทดสอบ Webhook, โควตาข้อความ |
+| **LINE OA Settings** | คู่มือเชื่อมต่อ 5 ขั้นตอนในหน้าเว็บ, ใช้แค่ Channel ID + Channel secret (ขอ Access token ให้อัตโนมัติ), ปุ่มเชื่อมต่อคลิกเดียว (ตั้ง Webhook + ทดสอบให้เอง), ตรวจสถานะ Webhook, ลิงก์เพิ่มเพื่อน, โควตาข้อความ |
 | **ตั้งค่าระบบ** | เปิด/ปิด Auto Reply, พฤติกรรมเมื่อพบหลายกฎ, Push fallback, Timezone (ค่าเริ่มต้น Asia/Bangkok), Default Reply (+cooldown), ระบบ Log และระยะเวลาเก็บข้อมูล, เปลี่ยนรหัสผ่าน, จัดการผู้ใช้และสิทธิ์, Audit Log |
 
 ---
@@ -245,9 +245,8 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 | `SESSION_TTL_HOURS` | | อายุ session (ค่าเริ่มต้น 168 ชม.) |
 | `COOKIE_SECURE` | | `auto` / `true` / `false` |
 | `TRUST_PROXY` | | `true` เมื่ออยู่หลัง Reverse Proxy (อ่าน IP จาก X-Forwarded-For) |
-| `LINE_CHANNEL_SECRET` | | (ไม่บังคับ) ถ้ากำหนด จะใช้แทนค่าที่ตั้งในหน้าเว็บ |
-| `LINE_CHANNEL_ACCESS_TOKEN` | | (ไม่บังคับ) เช่นเดียวกับด้านบน |
-| `LINE_CHANNEL_ID` | | (ไม่บังคับ) สำหรับอ้างอิง |
+| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | | (ไม่บังคับ) ถ้ากำหนด จะใช้แทนค่าที่กรอกในหน้าเว็บ — 2 ค่านี้พอสำหรับเชื่อมต่อ |
+| `LINE_CHANNEL_ACCESS_TOKEN` | | (ไม่บังคับ) token แบบ long-lived — ถ้าไม่ตั้ง ระบบขอ token จาก LINE ให้อัตโนมัติ |
 | `DATABASE_URL_UNPOOLED` | | (ไม่บังคับ) connection แบบ direct สำหรับ migration เมื่อ `DATABASE_URL` เป็น pooler (Neon/Vercel) |
 | `CRON_SECRET` | Vercel | รหัสสำหรับเรียก `/api/cron/maintenance` (Vercel Cron ส่งให้อัตโนมัติ) |
 | `QUEUE_WORKER_ENABLED` | | เปิด Background Worker (ค่าเริ่มต้น `true`, ปิดอัตโนมัติบน Vercel) |
@@ -261,44 +260,40 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 
 ---
 
-## วิธีตั้งค่า LINE Developers
+## วิธีเชื่อมต่อ LINE OA
 
-1. เข้า [LINE Developers Console](https://developers.line.biz/console/) และเข้าสู่ระบบ
-2. สร้าง **Provider** (หรือเลือกที่มีอยู่)
-3. สร้าง Channel ประเภท **Messaging API** (หรือเปิดใช้ Messaging API จาก LINE Official Account Manager → Settings → Messaging API)
-4. แท็บ **Basic settings** → คัดลอก **Channel ID** และ **Channel secret**
-5. แท็บ **Messaging API** → ส่วน *Channel access token (long-lived)* → กด **Issue** แล้วคัดลอก
-6. ใน **LINE Official Account Manager** → *Response settings*:
-   - เปิด **Webhook**
-   - ปิด **Auto-response messages** และ **Greeting messages** (เพื่อไม่ให้ LINE ตอบซ้ำกับระบบนี้)
-   - เลือกโหมด **Bot** (หรือ Chat + Webhook หากต้องการแชทด้วยแอป LINE OA ด้วย)
-7. ในระบบนี้ไปที่ **LINE OA Settings** → กรอก Channel ID, Channel Secret, Channel Access Token → **บันทึก Credentials** (ระบบเข้ารหัสก่อนบันทึก และจะไม่แสดงค่ากลับ)
-8. กด **ทดสอบการเชื่อมต่อ** — ควรแสดงชื่อบัญชีและ Basic ID
+ทำครั้งเดียว ประมาณ 5 นาที — ในเว็บมีหน้า **LINE OA Settings** ที่อธิบายทีละขั้นพร้อมปุ่มลัด และตรวจสถานะให้อัตโนมัติ
 
-> ทางเลือก: กำหนดผ่าน Environment `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` แทนการบันทึกในฐานข้อมูล
+**ขั้นตอนที่ 1 — เปิดใช้ Messaging API** (ใน [LINE Official Account Manager](https://manager.line.biz))
+1. เลือกบัญชี LINE OA → กด **ตั้งค่า** (Settings) มุมขวาบน → เมนูซ้าย **Messaging API**
+2. กด **เปิดใช้ Messaging API** → เลือกหรือสร้าง **Provider** (ตั้งชื่ออะไรก็ได้ เช่น ชื่อร้าน) → ช่อง Privacy policy/Terms เว้นว่างได้ → **ตกลง**
 
----
+**ขั้นตอนที่ 2 — คัดลอก 2 ค่า** ในหน้า Messaging API เดิม: **Channel ID** (ตัวเลข ~10 หลัก) และ **Channel secret** (32 ตัวอักษร) แล้ววางในหน้า **LINE OA Settings** ของระบบ
+(หาไม่เจอ: [LINE Developers Console](https://developers.line.biz/console/) → Provider → Channel → แท็บ **Basic settings**)
 
-## วิธีตั้งค่า Webhook
+> ไม่ต้องออก Channel access token เอง — ระบบขอ token อายุ 15 นาทีจาก LINE ให้อัตโนมัติด้วย Channel ID + Channel secret และต่ออายุเอง (ถ้าต้องการใช้ token แบบ long-lived ยังกรอกได้ที่ “ตัวเลือกขั้นสูง”)
 
-Webhook URL ของระบบคือ:
+**ขั้นตอนที่ 3 — กดปุ่ม “เชื่อมต่อ LINE OA”** ระบบจะทำให้อัตโนมัติ: บันทึกข้อมูล (เข้ารหัส) → ขอ Access token → ตรวจสอบบัญชี → **ตั้ง Webhook URL ที่ LINE ให้เอง** → ให้ LINE ทดสอบส่งข้อความมา → ตรวจว่าเปิด Webhook แล้ว แต่ละขั้นแสดงผลพร้อมวิธีแก้ถ้าไม่สำเร็จ
+
+**ขั้นตอนที่ 4 — ตั้งค่าการตอบกลับ** (LINE OA Manager → ตั้งค่า → **การตอบกลับ** / Response settings)
+- เปิด **Webhook** (หน้าเว็บของระบบจะยืนยันให้ว่าเปิดแล้ว)
+- ปิด **ข้อความตอบกลับอัตโนมัติ** (Auto-response) — ไม่งั้นลูกค้าได้คำตอบซ้ำ 2 ข้อความ
+- ปิด **ข้อความทักทาย** (Greeting) ถ้าจะใช้กฎ “ต้อนรับเพื่อนใหม่” ของระบบนี้
+- สวิตช์ **แชท** เปิดหรือปิดก็ได้
+
+**ขั้นตอนที่ 5 — ทดสอบ** เพิ่ม LINE OA เป็นเพื่อน (มีลิงก์เพิ่มเพื่อนในหน้าเว็บ) แล้วพิมพ์ `ราคา` / `สมัครสมาชิก` / `ติดต่อ` — หน้าเว็บจะแสดงทันทีเมื่อได้รับข้อความแรก
+
+> ทางเลือก: กำหนดผ่าน Environment `LINE_CHANNEL_ID` + `LINE_CHANNEL_SECRET` (และ `LINE_CHANNEL_ACCESS_TOKEN` ถ้าต้องการ) แทนการกรอกในหน้าเว็บ — ค่าจาก Environment มีลำดับความสำคัญสูงกว่า
+
+### Webhook URL
 
 ```
 https://<โดเมนของคุณ>/api/webhook/line
 ```
 
-**วิธีที่ 1 — ผ่านหน้า LINE OA Settings (แนะนำ)**
-1. ตั้ง `APP_URL` เป็นโดเมน HTTPS จริง
-2. หน้า **LINE OA Settings** → การ์ด Webhook → กด **ตั้งค่า Webhook URL ไปยัง LINE**
-3. กด **ทดสอบ Webhook** — LINE จะส่งคำขอทดสอบมายังระบบ
+ปกติไม่ต้องตั้งเอง เพราะปุ่ม **เชื่อมต่อ LINE OA** ตั้งให้อัตโนมัติ ถ้าต้องการตั้งเองใน LINE Developers Console: แท็บ **Messaging API** → *Webhook settings* → **Edit** → วาง URL → **Verify** → เปิด **Use webhook** และแนะนำให้เปิด **Webhook redelivery** (ระบบกัน Event ซ้ำด้วย `webhookEventId` อยู่แล้ว)
 
-**วิธีที่ 2 — ผ่าน LINE Developers Console**
-1. แท็บ **Messaging API** → *Webhook settings* → **Edit** → วาง Webhook URL
-2. กด **Verify** (ต้องได้ Success)
-3. เปิด **Use webhook**
-4. แนะนำให้เปิด **Webhook redelivery** — ระบบรองรับการส่งซ้ำและกัน Event ซ้ำด้วย `webhookEventId` อยู่แล้ว
-
-ข้อกำหนด: LINE ส่ง Webhook ได้เฉพาะ **HTTPS ที่มีใบรับรองถูกต้อง** เท่านั้น
+ข้อกำหนด: LINE ส่ง Webhook ได้เฉพาะ **HTTPS ที่มีใบรับรองถูกต้อง** เท่านั้น (บน Vercel ใช้โดเมน `.vercel.app` ได้เลย)
 
 ---
 
@@ -465,7 +460,7 @@ pm2 start .next/standalone/server.js --name line-oa-manager
    | `APP_URL` | (ไม่บังคับ) ใส่เมื่อใช้โดเมนของตัวเอง เช่น `https://bot.example.com` |
 
 4. กด **Deploy** (ถ้าเพิ่มตัวแปรหลังจาก deploy ไปแล้ว ให้กด **Redeploy**) — ดู Build Logs จะเห็นขั้นตอน migrate และ seed
-5. เปิด `https://<ชื่อโปรเจกต์>.vercel.app` เข้าสู่ระบบด้วย `ADMIN_USERNAME` / `ADMIN_PASSWORD` แล้วตั้งค่าในหน้า **LINE OA Settings** และ Webhook ตามหัวข้อ [วิธีตั้งค่า Webhook](#วิธีตั้งค่า-webhook)
+5. เปิด `https://<ชื่อโปรเจกต์>.vercel.app` เข้าสู่ระบบด้วย `ADMIN_USERNAME` / `ADMIN_PASSWORD` แล้วทำตามคู่มือในหน้า **LINE OA Settings** (ดู [วิธีเชื่อมต่อ LINE OA](#วิธีเชื่อมต่อ-line-oa))
 
 **(ไม่บังคับ) ให้ระบบส่งซ้ำ/กู้งานค้างถี่ขึ้น** — Vercel Cron แพ็กเกจฟรีรันได้วันละครั้ง สามารถใช้บริการ Cron ภายนอกที่ฟรี เช่น [cron-job.org](https://cron-job.org) ให้เรียกทุก 5–10 นาที:
 

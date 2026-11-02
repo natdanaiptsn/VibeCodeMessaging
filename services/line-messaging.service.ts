@@ -43,7 +43,7 @@ type FetchOptions = {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function lineFetch<T>(token: string, path: string, opts: FetchOptions = {}): Promise<LineResponse<T>> {
-  if (!token) throw new LineApiError(401, "ยังไม่ได้ตั้งค่า Channel Access Token", [], null, "UNAUTHORIZED");
+  if (!token) throw new LineApiError(401, "ยังไม่ได้เชื่อมต่อ LINE (ไม่มี Access token)", [], null, "UNAUTHORIZED");
   const retries = opts.retries ?? 0;
   let attempt = 0;
   while (true) {
@@ -124,6 +124,37 @@ export type LineProfile = {
 export type SentMessages = { sentMessages?: { id: string; quoteToken?: string }[] };
 
 export const lineApi = {
+  /**
+   * ขอ Stateless channel access token (อายุ 15 นาที) ด้วย Channel ID + Channel secret
+   * https://developers.line.biz/en/reference/messaging-api/#issue-stateless-channel-access-token
+   */
+  async issueStatelessToken(channelId: string, channelSecret: string): Promise<{ accessToken: string; expiresIn: number }> {
+    let res: Response;
+    try {
+      res = await fetch(`${apiBase()}/oauth2/v3/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "client_credentials", client_id: channelId, client_secret: channelSecret }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+        cache: "no-store",
+      });
+    } catch (e) {
+      throw new LineApiError(0, `ไม่สามารถเชื่อมต่อ LINE API ได้: ${(e as Error).message}`, [], null, "NETWORK");
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      access_token?: string;
+      expires_in?: number;
+      error?: string;
+      error_description?: string;
+    };
+    if (!res.ok || !data.access_token) {
+      const reason = data.error === "invalid_client" ? "Channel ID หรือ Channel secret ไม่ถูกต้อง" : (data.error_description ?? data.error ?? `สถานะ ${res.status}`);
+      throw new LineApiError(res.status, reason, [], res.headers.get("x-line-request-id"), res.status === 401 ? "UNAUTHORIZED" : "API");
+    }
+    return { accessToken: data.access_token, expiresIn: Math.max(60, Number(data.expires_in) || 900) };
+  },
+
+
   getBotInfo: (token: string) => lineFetch<BotInfo>(token, "/v2/bot/info"),
 
   getProfile: (token: string, userId: string) =>

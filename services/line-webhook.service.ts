@@ -46,7 +46,7 @@ export async function ingestWebhook(rawBody: string, signature: string | null): 
   if (Buffer.byteLength(rawBody) > LINE_LIMITS.WEBHOOK_BODY_MAX_BYTES) {
     return { ok: false, status: 413, message: "Payload too large" };
   }
-  const creds = await getLineCredentials();
+  const creds = await getLineCredentials({ includeToken: false });
   if (!creds.channelSecret) {
     logger.error("Webhook received but LINE Channel Secret is not configured");
     return { ok: false, status: 503, message: "Channel secret is not configured" };

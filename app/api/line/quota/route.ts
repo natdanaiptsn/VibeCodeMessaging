@@ -5,7 +5,7 @@ import { lineApi, describeLineError } from "@/services/line-messaging.service";
 /** โควตาข้อความ Push ของเดือนนี้ */
 export const GET = route({ permission: "line:view", rateLimitPerMinute: 20 }, async () => {
   const creds = await getLineCredentials();
-  if (!creds.channelAccessToken) return { available: false, error: "ยังไม่ได้ตั้งค่า Channel Access Token" };
+  if (!creds.channelAccessToken) return { available: false, error: creds.tokenError ?? "ยังไม่ได้ตั้งค่า" };
   try {
     const [quota, usage] = await Promise.all([
       lineApi.getQuota(creds.channelAccessToken),

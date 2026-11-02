@@ -1,7 +1,7 @@
 import { route, readJson } from "@/lib/api/handler";
 import { badRequest } from "@/lib/errors";
 import { webhookEndpointSchema } from "@/lib/validation/line";
-import { getLineCredentials, webhookUrl } from "@/services/line-account.service";
+import { getLineCredentials, requireAccessToken, webhookUrl } from "@/services/line-account.service";
 import { lineApi, describeLineError } from "@/services/line-messaging.service";
 import { auditFromCtx } from "@/lib/audit";
 
@@ -9,7 +9,7 @@ import { auditFromCtx } from "@/lib/audit";
 export const GET = route({ permission: "line:view", rateLimitPerMinute: 20 }, async () => {
   const creds = await getLineCredentials();
   const expected = webhookUrl();
-  if (!creds.channelAccessToken) return { expected, configured: null, active: false, error: "ยังไม่ได้ตั้งค่า Channel Access Token" };
+  if (!creds.channelAccessToken) return { expected, configured: null, active: false, error: creds.tokenError ?? "ยังไม่ได้ตั้งค่า" };
   try {
     const { data } = await lineApi.getWebhookEndpoint(creds.channelAccessToken);
     return { expected, configured: data.endpoint, active: data.active, matches: data.endpoint === expected, error: null };
@@ -22,9 +22,9 @@ export const GET = route({ permission: "line:view", rateLimitPerMinute: 20 }, as
 export const PUT = route({ permission: "line:manage", rateLimitPerMinute: 10 }, async (ctx) => {
   const { endpoint } = webhookEndpointSchema.parse(await readJson(ctx.req, 4096));
   const creds = await getLineCredentials();
-  if (!creds.channelAccessToken) throw badRequest("ยังไม่ได้ตั้งค่า Channel Access Token");
+  const token = requireAccessToken(creds);
   try {
-    await lineApi.setWebhookEndpoint(creds.channelAccessToken, endpoint);
+    await lineApi.setWebhookEndpoint(token, endpoint);
   } catch (err) {
     throw badRequest(`ตั้งค่า Webhook URL ไม่สำเร็จ: ${describeLineError(err)}`);
   }

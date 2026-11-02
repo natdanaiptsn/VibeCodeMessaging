@@ -20,7 +20,7 @@ export const POST = route({ permission: "flex:manage", rateLimitPerMinute: 30 },
   if (input.remote && local.valid) {
     const creds = await getLineCredentials();
     if (!creds.channelAccessToken) {
-      remote = { checked: false, ok: false, message: "ยังไม่ได้ตั้งค่า Channel Access Token จึงตรวจสอบกับ LINE ไม่ได้" };
+      remote = { checked: false, ok: false, message: `ยังเชื่อมต่อ LINE ไม่ได้ จึงตรวจสอบกับ LINE ไม่ได้ (${creds.tokenError ?? "ยังไม่ได้ตั้งค่า"})` };
     } else {
       const values = sampleTemplateValues();
       const contents = renderFlexVariables(input.contents, values) as Record<string, unknown>;

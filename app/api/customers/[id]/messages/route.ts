@@ -6,7 +6,7 @@ import { sendMessageSchema } from "@/lib/validation/line";
 import { badRequest, notFound } from "@/lib/errors";
 import { listCustomerMessages } from "@/services/message.service";
 import { getSettings } from "@/services/settings.service";
-import { getLineCredentials } from "@/services/line-account.service";
+import { getLineCredentials, requireAccessToken } from "@/services/line-account.service";
 import { sendAdminPush } from "@/services/reply.service";
 import { renderTextMessage } from "@/services/text-template.service";
 import { renderFlexMessage } from "@/services/flex-message.service";
@@ -44,7 +44,7 @@ export const POST = route<{ id: string }>({ permission: "inbox:send", rateLimitP
   const customer = await prisma.customer.findUnique({ where: { id } });
   if (!customer) throw notFound("ไม่พบลูกค้า");
   const [settings, creds] = await Promise.all([getSettings(), getLineCredentials()]);
-  if (!creds.channelAccessToken) throw badRequest("ยังไม่ได้ตั้งค่า Channel Access Token");
+  const token = requireAccessToken(creds);
 
   const values = buildTemplateValues({
     displayName: customer.displayName,
@@ -69,7 +69,7 @@ export const POST = route<{ id: string }>({ permission: "inbox:send", rateLimitP
   const log = await sendAdminPush({
     customer,
     messages: [message],
-    token: creds.channelAccessToken,
+    token,
     userId: ctx.session.user.id,
     clientRequestId: input.clientRequestId,
     settings,
