@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FlaskConical,
   Info,
   Lightbulb,
   Loader2,
@@ -36,6 +37,9 @@ import { Field } from "@/components/common/field";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { CustomerAvatar } from "@/components/common/customer-avatar";
 import { ErrorState, LoadingState } from "@/components/common/states";
+import { LineTextBubble } from "@/components/text-messages/line-text-bubble";
+import { ChatBackdrop } from "@/components/flex/flex-preview";
+import { buildTemplateValues, renderTemplate } from "@/lib/templates/variables";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
 import { useAppContext, useCan } from "@/hooks/use-app-context";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
@@ -73,6 +77,15 @@ type Account = {
 type WebhookInfo = { expected: string | null; configured: string | null; active: boolean; matches?: boolean; error: string | null };
 type Quota = { available: boolean; type?: string; limit?: number | null; used?: number; error?: string };
 type ConnectStep = { key: string; label: string; status: "success" | "failed" | "warning" | "skipped"; message: string; hint?: string };
+type TestRuleStatus = {
+  rule: { id: string; isActive: boolean } | null;
+  ruleName: string;
+  keywords: string[];
+  reply: string;
+  autoReplyEnabled: boolean;
+};
+const TEST_RULE_LABEL = "ทดสอบระบบ (พิมพ์ test)";
+
 type ConnectResult = { ok: boolean; steps: ConnectStep[]; webhookActive?: boolean | null; account: Account };
 
 // ───────────────────────── ส่วนประกอบย่อย ─────────────────────────
@@ -166,6 +179,8 @@ export function LineSettingsView() {
   const connected = account.data?.connectionStatus === "CONNECTED";
   const webhook = useApiQuery<WebhookInfo>(["line-webhook"], "/api/line/webhook", { enabled: connected });
   const quota = useApiQuery<Quota>(["line-quota"], "/api/line/quota", { enabled: connected });
+  const testRule = useApiQuery<TestRuleStatus>(["line-test-rule"], "/api/line/test-rule");
+  const canManageRules = useCan("rules:manage");
 
   const [form, setForm] = useState({ channelId: "", channelSecret: "", channelAccessToken: "" });
   const [showSecret, setShowSecret] = useState(false);
@@ -240,6 +255,13 @@ export function LineSettingsView() {
       if (r.ok) toast.success(r.message);
       else toast.error(r.message);
       await refreshAll();
+    });
+
+  const createTestRule = () =>
+    run("test-rule", async () => {
+      const r = await apiFetch<TestRuleStatus & { created: boolean }>("/api/line/test-rule", { method: "POST" });
+      toast.success(r.created ? "สร้างกฎทดสอบแล้ว — ลองพิมพ์ test ส่งหา LINE OA ได้เลย" : "เปิดใช้งานกฎทดสอบแล้ว");
+      await Promise.all([qc.invalidateQueries({ queryKey: ["line-test-rule"] }), qc.invalidateQueries({ queryKey: ["rules"] })]);
     });
 
   const clearCredentials = (which: "token" | "all") =>
@@ -587,10 +609,51 @@ export function LineSettingsView() {
                 </span>
               </li>
               <li>
-                พิมพ์ข้อความทดสอบ เช่น <Ui>ราคา</Ui> <Ui>สมัครสมาชิก</Ui> หรือ <Ui>ติดต่อ</Ui> (เป็นกฎตัวอย่างที่ระบบเตรียมไว้)
+                สร้างกฎทดสอบ: กดปุ่มด้านล่าง ระบบจะสร้างกฎ <strong>“{TEST_RULE_LABEL}”</strong> ให้ — เมื่อลูกค้าพิมพ์ <Ui>test</Ui> หรือ <Ui>ทดสอบ</Ui>{" "}
+                ระบบจะตอบกลับทันที (กดซ้ำได้ ไม่สร้างกฎซ้ำ)
+                <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {testRule.data?.rule?.isActive ? (
+                    <Badge variant="success"><CheckCircle2 /> มีกฎทดสอบแล้ว พร้อมใช้งาน</Badge>
+                  ) : testRule.data?.rule ? (
+                    <Badge variant="warning"><AlertTriangle /> มีกฎทดสอบแต่ถูกปิดอยู่</Badge>
+                  ) : null}
+                  {canManageRules && (
+                    <Button
+                      size="sm"
+                      variant={testRule.data?.rule?.isActive ? "outline" : "default"}
+                      onClick={createTestRule}
+                      disabled={busy !== null}
+                    >
+                      {busy === "test-rule" ? <Loader2 className="animate-spin" /> : <FlaskConical />}
+                      {testRule.data?.rule ? (testRule.data.rule.isActive ? "สร้างกฎทดสอบใหม่อีกครั้ง" : "เปิดใช้งานกฎทดสอบ") : "สร้างกฎทดสอบ"}
+                    </Button>
+                  )}
+                </span>
               </li>
-              <li>ควรได้รับคำตอบภายในไม่กี่วินาที และข้อความจะแสดงในหน้า “กล่องข้อความ”</li>
+              <li>
+                พิมพ์ <Ui>test</Ui> ส่งหา LINE OA จากมือถือ ควรได้รับคำตอบภายในไม่กี่วินาที หน้าตาประมาณนี้:
+                <ChatBackdrop className="mt-2 max-w-md">
+                  <LineTextBubble
+                    text={renderTemplate(testRule.data?.reply ?? "", buildTemplateValues({ displayName: "ชื่อของคุณ", userId: "U...", timezone }))}
+                  />
+                </ChatBackdrop>
+              </li>
+              <li>ข้อความที่ส่งและคำตอบจะแสดงในหน้า “กล่องข้อความ” และ “ประวัติการตอบกลับ”</li>
             </Steps>
+            {testRule.data && !testRule.data.autoReplyEnabled && (
+              <Tip tone="warn">
+                <p>
+                  ระบบตอบกลับอัตโนมัติ<strong>ถูกปิดอยู่</strong> — ลูกค้าจะไม่ได้รับคำตอบ เปิดได้ที่หน้า{" "}
+                  <Link className="font-medium underline" href="/settings">ตั้งค่าระบบ</Link> → ทั่วไป → เปิด/ปิด Auto Reply
+                </p>
+              </Tip>
+            )}
+            <Tip>
+              <p>
+                ทดสอบเสร็จแล้ว จะเก็บกฎนี้ไว้ ปิด หรือลบก็ได้ที่หน้า <Link className="font-medium underline" href="/auto-reply">ระบบตอบกลับอัตโนมัติ</Link>{" "}
+                (ชื่อกฎ “{TEST_RULE_LABEL}”)
+              </p>
+            </Tip>
             <div className="rounded-lg border p-3">
               {a.lastInbound ? (
                 <p className="flex flex-wrap items-center gap-2">
@@ -613,7 +676,7 @@ export function LineSettingsView() {
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
                 <li>ตรวจว่าเปิด <strong>Webhook</strong> แล้ว (ขั้นตอนที่ 4) — ถ้าหน้านี้ไม่แสดงว่าได้รับข้อความ แปลว่า LINE ยังไม่ได้ส่งมา</li>
                 <li>ได้รับข้อความแต่ไม่ตอบ: ดูหน้า <Link className="underline" href="/reply-logs">ประวัติการตอบกลับ</Link> ว่ามีข้อผิดพลาดอะไร</li>
-                <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href="/settings">ตั้งค่าระบบ</Link> และมีกฎที่ตรงกับข้อความที่พิมพ์</li>
+                <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href="/settings">ตั้งค่าระบบ</Link> และพิมพ์ <Ui>test</Ui> ตรงตัว (ไม่มีคำอื่นต่อท้าย)</li>
                 <li>ได้คำตอบซ้ำ 2 ข้อความ: ปิด “ข้อความตอบกลับอัตโนมัติ” ใน LINE OA Manager (ขั้นตอนที่ 4 ข้อ 3)</li>
               </ul>
             </div>
