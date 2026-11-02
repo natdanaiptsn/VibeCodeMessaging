@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  Bot,
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
@@ -24,6 +25,7 @@ import {
   Webhook,
   XCircle,
 } from "lucide-react";
+import { openTestChat } from "@/components/test-chat/test-chat-widget";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -105,7 +107,7 @@ function StepCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className={cn("gap-4", done && "border-emerald-200")}>
+    <Card className={cn("gap-4", done && "border-emerald-200 dark:border-emerald-500/30")}>
       <CardHeader className="grid-cols-[auto_1fr] items-start gap-x-3">
         <span
           className={cn(
@@ -132,7 +134,7 @@ function Steps({ children }: { children: React.ReactNode }) {
 
 function Ui({ children }: { children: React.ReactNode }) {
   // ชื่อปุ่ม/เมนูบนหน้าจอ LINE
-  return <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-900">{children}</span>;
+  return <span className="rounded bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 font-medium text-gray-900 dark:text-gray-100">{children}</span>;
 }
 
 function Tip({ children, tone = "info" }: { children: React.ReactNode; tone?: "info" | "warn" }) {
@@ -140,7 +142,7 @@ function Tip({ children, tone = "info" }: { children: React.ReactNode; tone?: "i
     <div
       className={cn(
         "flex gap-2 rounded-lg px-3 py-2.5",
-        tone === "info" ? "bg-blue-50 text-blue-900" : "bg-amber-50 text-amber-900",
+        tone === "info" ? "bg-blue-50 dark:bg-blue-500/15 text-blue-900 dark:text-blue-200" : "bg-amber-50 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200",
       )}
     >
       {tone === "info" ? <Lightbulb className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}
@@ -160,10 +162,10 @@ function ExternalButton({ href, children }: { href: string; children: React.Reac
 }
 
 function StepResultIcon({ status }: { status: ConnectStep["status"] }) {
-  if (status === "success") return <CheckCircle2 className="size-5 shrink-0 text-emerald-600" />;
-  if (status === "failed") return <XCircle className="size-5 shrink-0 text-red-600" />;
-  if (status === "warning") return <AlertTriangle className="size-5 shrink-0 text-amber-600" />;
-  return <MinusCircle className="size-5 shrink-0 text-gray-400" />;
+  if (status === "success") return <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />;
+  if (status === "failed") return <XCircle className="size-5 shrink-0 text-red-600 dark:text-red-400" />;
+  if (status === "warning") return <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-300" />;
+  return <MinusCircle className="size-5 shrink-0 text-gray-400 dark:text-gray-500" />;
 }
 
 function copy(text: string, label: string) {
@@ -322,7 +324,7 @@ export function LineSettingsView() {
             <span className="text-sm text-muted-foreground">ทำแล้ว {doneCount}/5 ขั้นตอน</span>
           </div>
         </CardContent>
-        <div className="mx-4 h-2 overflow-hidden rounded-full bg-gray-100">
+        <div className="mx-4 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(doneCount / 5) * 100}%` }} />
         </div>
       </Card>
@@ -536,14 +538,14 @@ export function LineSettingsView() {
                     <div className="min-w-0">
                       <p className="font-medium">{s.label}</p>
                       <p className="break-words text-muted-foreground">{s.message}</p>
-                      {s.hint && <p className="mt-0.5 text-amber-700">วิธีแก้: {s.hint}</p>}
+                      {s.hint && <p className="mt-0.5 text-amber-700 dark:text-amber-300">วิธีแก้: {s.hint}</p>}
                     </div>
                   </li>
                 ))}
               </ul>
             )}
             {!result && a.connectionStatus === "FAILED" && a.connectionError && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">ครั้งล่าสุดเชื่อมต่อไม่สำเร็จ: {a.connectionError}</p>
+              <p className="rounded-md bg-red-50 dark:bg-red-500/15 px-3 py-2 text-red-700 dark:text-red-300">ครั้งล่าสุดเชื่อมต่อไม่สำเร็จ: {a.connectionError}</p>
             )}
           </StepCard>
 
@@ -640,6 +642,15 @@ export function LineSettingsView() {
                 </span>
               </li>
               <li>
+                (ไม่บังคับ) ลองในเว็บก่อน: กดปุ่ม <Ui>แชททดสอบ</Ui> (ไอคอนหุ่นยนต์มุมขวาล่าง) แล้วพิมพ์ <Ui>test</Ui> หรือ <Ui>TestFlex</Ui>{" "}
+                ระบบจะแสดงคำตอบที่ LINE OA จะส่ง และบอกว่าตรงกับกฎไหน โดยไม่ส่งข้อความถึง LINE จริง
+                <span className="mt-1.5 flex">
+                  <Button size="sm" variant="outline" onClick={openTestChat}>
+                    <Bot /> เปิดแชททดสอบ
+                  </Button>
+                </span>
+              </li>
+              <li>
                 พิมพ์ <Ui>test</Ui> ส่งหา LINE OA จากมือถือ ควรได้รับคำตอบภายในไม่กี่วินาที หน้าตาประมาณนี้:
                 <ChatBackdrop className="mt-2 max-w-md">
                   <LineTextBubble text={renderTemplate(testRule.data?.text.reply ?? "", sampleValues)} />
@@ -673,7 +684,7 @@ export function LineSettingsView() {
             <div className="rounded-lg border p-3">
               {a.lastInbound ? (
                 <p className="flex flex-wrap items-center gap-2">
-                  <CheckCircle2 className="size-4 text-emerald-600" />
+                  <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
                   ได้รับข้อความล่าสุดจากลูกค้า <strong>{formatRelative(a.lastInbound.at, timezone)}</strong>
                   {a.lastInbound.text && <span className="text-muted-foreground">“{a.lastInbound.text.slice(0, 40)}”</span>}
                 </p>
@@ -743,7 +754,7 @@ export function LineSettingsView() {
                       <span className="text-base font-normal text-muted-foreground"> / {quota.data.type === "limited" ? formatNumber(quota.data.limit ?? 0) : "ไม่จำกัด"}</span>
                     </p>
                     {quota.data.type === "limited" && quota.data.limit ? (
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
                         <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, ((quota.data.used ?? 0) / quota.data.limit) * 100)}%` }} />
                       </div>
                     ) : null}

@@ -368,7 +368,7 @@ export function FlexBuilder({
         </CardHeader>
         <CardContent className="space-y-3 px-4">
           {doc.kind === "carousel" && (
-            <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-gray-50 p-2">
+            <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-gray-50 dark:bg-white/5 p-2">
               {doc.bubbles.map((b, i) => (
                 <Button key={b.id} variant={i === bubbleIndex ? "default" : "outline"} size="sm" className="h-7 min-w-8 px-2" onClick={() => { setBubbleIndex(i); setSelectedId(null); }}>
                   {i + 1}
@@ -428,11 +428,11 @@ export function FlexBuilder({
         </ChatBackdrop>
         <button type="button" onClick={() => setDialog("validate")} className="w-full text-left">
           {validation.valid ? (
-            <p className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            <p className="flex items-center gap-2 rounded-md bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
               <CheckCircle2 className="size-4" /> ผ่านการตรวจสอบ{validation.warnings.length ? ` (คำเตือน ${validation.warnings.length})` : ""}
             </p>
           ) : (
-            <p className="flex items-center gap-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="flex items-center gap-2 rounded-md bg-red-50 dark:bg-red-500/15 px-3 py-2 text-sm text-red-700 dark:text-red-300">
               <AlertTriangle className="size-4" /> พบข้อผิดพลาด {validation.errors.length} รายการ — คลิกเพื่อดู
             </p>
           )}
@@ -500,7 +500,7 @@ export function FlexBuilder({
 
       <DragOverlay dropAnimation={null}>
         {activeDrag ? (
-          <div className="rounded-md border border-primary bg-white px-3 py-1.5 text-sm shadow-lg">
+          <div className="rounded-md border border-primary bg-card px-3 py-1.5 text-sm shadow-lg">
             {activeDrag.startsWith("palette:")
               ? PALETTE.find((p) => `palette:${p.kind}` === activeDrag)?.label
               : "ย้ายคอมโพเนนต์"}
@@ -681,11 +681,11 @@ function ValidateDialog({
         </DialogHeader>
         <div className="max-h-[55dvh] space-y-3 overflow-y-auto">
           {validation.valid ? (
-            <p className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700"><CheckCircle2 className="size-4" /> ผ่านการตรวจสอบในระบบ</p>
+            <p className="flex items-center gap-2 rounded-md bg-emerald-50 dark:bg-emerald-500/15 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="size-4" /> ผ่านการตรวจสอบในระบบ</p>
           ) : (
             <ul className="space-y-1.5">
               {validation.errors.map((e, i) => (
-                <li key={i} className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                <li key={i} className="rounded-md bg-red-50 dark:bg-red-500/15 px-3 py-2 text-sm text-red-700 dark:text-red-300">
                   <code className="text-xs">{e.path}</code> — {e.message}
                 </li>
               ))}
@@ -694,12 +694,12 @@ function ValidateDialog({
           {validation.warnings.length > 0 && (
             <ul className="space-y-1.5">
               {validation.warnings.map((w, i) => (
-                <li key={i} className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"><code className="text-xs">{w.path}</code> — {w.message}</li>
+                <li key={i} className="rounded-md bg-amber-50 dark:bg-amber-500/15 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"><code className="text-xs">{w.path}</code> — {w.message}</li>
               ))}
             </ul>
           )}
           {remote && (
-            <div className={cn("rounded-md px-3 py-2 text-sm", remote.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>
+            <div className={cn("rounded-md px-3 py-2 text-sm", remote.ok ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300")}>
               <p className="font-medium">LINE API: {remote.message}</p>
               {remote.details?.map((d, i) => <p key={i} className="text-xs">{d.property}: {d.message}</p>)}
             </div>

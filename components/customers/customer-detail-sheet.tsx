@@ -63,11 +63,11 @@ export function CustomerDetailSheet({ customerId, onOpenChange }: { customerId: 
                   {data.isFollowing ? <Badge variant="success">ติดตามอยู่</Badge> : <Badge variant="muted">เลิกติดตาม / บล็อก</Badge>}
                 </div>
               </div>
-              {data.statusMessage && <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-muted-foreground">“{data.statusMessage}”</p>}
+              {data.statusMessage && <p className="rounded-md bg-gray-50 dark:bg-white/5 px-3 py-2 text-sm text-muted-foreground">“{data.statusMessage}”</p>}
               <div>
                 <Label className="text-xs text-muted-foreground">LINE User ID</Label>
                 <div className="mt-1 flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded bg-gray-100 px-2 py-1 text-xs">{data.lineUserId}</code>
+                  <code className="min-w-0 flex-1 truncate rounded bg-gray-100 dark:bg-white/10 px-2 py-1 text-xs">{data.lineUserId}</code>
                   <Button
                     variant="ghost"
                     size="icon-sm"

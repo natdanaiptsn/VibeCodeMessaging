@@ -107,7 +107,7 @@ function ColorProp({ label, value, onChange }: { label: string; value: unknown; 
           type="color"
           value={valid ? str.slice(0, 7) : "#ffffff"}
           onChange={(e) => onChange(e.target.value.toUpperCase())}
-          className="h-8 w-9 shrink-0 cursor-pointer rounded border bg-white p-0.5"
+          className="h-8 w-9 shrink-0 cursor-pointer rounded border bg-white dark:bg-input/30 p-0.5"
           aria-label={label}
         />
         <Input className="h-8 font-mono text-xs" value={str} onChange={(e) => onChange(e.target.value.trim() || undefined)} placeholder="#RRGGBB" aria-invalid={str !== "" && !valid} />
@@ -156,7 +156,7 @@ export function ActionEditor({ value, onChange, required = false }: { value: unk
   };
   const uriCheck = type === "uri" && typeof action.uri === "string" ? checkActionUri(action.uri) : null;
   return (
-    <div className="grid gap-2 rounded-md border bg-gray-50/70 p-2">
+    <div className="grid gap-2 rounded-md border bg-gray-50/70 dark:bg-white/5 p-2">
       <Row label="Action">
         <Select
           value={type}
@@ -215,7 +215,7 @@ function VariableButtons({ onInsert }: { onInsert: (token: string) => void }) {
   return (
     <div className="flex flex-wrap gap-1">
       {TEMPLATE_VARIABLES.map((v) => (
-        <button key={v.key} type="button" onClick={() => onInsert(`{{${v.key}}}`)} className="flex items-center gap-0.5 rounded border bg-white px-1.5 py-0.5 text-[11px] hover:bg-gray-50" title={v.label}>
+        <button key={v.key} type="button" onClick={() => onInsert(`{{${v.key}}}`)} className="flex items-center gap-0.5 rounded border bg-card px-1.5 py-0.5 text-[11px] hover:bg-gray-50 dark:hover:bg-white/5" title={v.label}>
           <Braces className="size-3" /> {v.key}
         </button>
       ))}

@@ -66,7 +66,7 @@ export function ErrorState({
 }) {
   return (
     <div className={cn("flex flex-col items-center justify-center gap-2 px-6 py-12 text-center", className)}>
-      <div className="mb-1 flex size-12 items-center justify-center rounded-full bg-red-50">
+      <div className="mb-1 flex size-12 items-center justify-center rounded-full bg-red-50 dark:bg-red-500/15">
         <AlertTriangle className="size-6 text-destructive" />
       </div>
       <p className="font-medium">{title}</p>

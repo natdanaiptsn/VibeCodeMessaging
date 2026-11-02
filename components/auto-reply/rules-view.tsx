@@ -90,7 +90,7 @@ function RuleTester({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
         {result && (
           <div className="space-y-3 rounded-lg border p-3">
             {!result.autoReplyEnabled && (
-              <p className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">หมายเหตุ: ระบบตอบกลับอัตโนมัติปิดอยู่ (ผลทดสอบนี้จำลองเหมือนเปิดใช้งาน)</p>
+              <p className="rounded bg-amber-50 dark:bg-amber-500/15 px-2 py-1 text-xs text-amber-800 dark:text-amber-200">หมายเหตุ: ระบบตอบกลับอัตโนมัติปิดอยู่ (ผลทดสอบนี้จำลองเหมือนเปิดใช้งาน)</p>
             )}
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">ผลลัพธ์:</span>
@@ -107,7 +107,7 @@ function RuleTester({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
               </ul>
             )}
             {result.skippedReason && !result.messages.length && <p className="text-sm text-muted-foreground">{SKIP_LABEL[result.skippedReason] ?? result.skippedReason}</p>}
-            {result.errors.map((e) => <p key={e} className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">{e}</p>)}
+            {result.errors.map((e) => <p key={e} className="rounded bg-red-50 dark:bg-red-500/15 px-2 py-1 text-xs text-red-700 dark:text-red-300">{e}</p>)}
             {result.messages.length > 0 && (
               <ChatBackdrop className="space-y-2">
                 {result.messages.map((m, i) =>
@@ -261,7 +261,7 @@ export function RulesView() {
                     <p className="font-medium">{r.name}</p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {r.keywords.slice(0, 6).map((k) => (
-                        <span key={k.id} className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px]">{k.keyword}</span>
+                        <span key={k.id} className="rounded bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 font-mono text-[11px]">{k.keyword}</span>
                       ))}
                       {r.keywords.length > 6 && <span className="text-xs text-muted-foreground">+{r.keywords.length - 6}</span>}
                       {r.keywords.length === 0 && <span className="text-xs text-muted-foreground">{TRIGGER_LABELS[r.triggerType]}</span>}

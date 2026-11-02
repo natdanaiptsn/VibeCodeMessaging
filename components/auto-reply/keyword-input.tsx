@@ -28,7 +28,7 @@ export function KeywordInput({
     setDraft("");
   };
   return (
-    <div className={cn("rounded-md border border-input bg-white p-2 shadow-xs", invalid && "border-destructive")}>
+    <div className={cn("rounded-md border border-input bg-white dark:bg-input/30 p-2 shadow-xs", invalid && "border-destructive")}>
       {value.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {value.map((k, i) => (
@@ -36,7 +36,7 @@ export function KeywordInput({
               key={`${k}-${i}`}
               className={cn(
                 "inline-flex max-w-full items-center gap-1 rounded-md bg-accent px-2 py-1 text-xs text-accent-foreground",
-                errors?.[i] && "bg-red-50 text-red-700 ring-1 ring-red-300",
+                errors?.[i] && "bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-300 ring-1 ring-red-300 dark:ring-red-500/40",
               )}
               title={errors?.[i]}
             >

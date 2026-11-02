@@ -15,6 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NAV_ITEMS } from "@/components/layout/nav-items";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { TestChatWidget } from "@/components/test-chat/test-chat-widget";
 import { AppContextProvider, type AppUser } from "@/hooks/use-app-context";
 import { apiFetch } from "@/hooks/use-api";
 import { can, ROLE_LABELS } from "@/lib/auth/permissions";
@@ -49,10 +51,10 @@ function NavList({ user, onNavigate }: { user: AppUser; onNavigate?: () => void 
             onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-              active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-gray-100",
+              active ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-gray-100 dark:hover:bg-white/5",
             )}
           >
-            <Icon className={cn("size-[18px]", active ? "text-primary" : "text-gray-500")} />
+            <Icon className={cn("size-[18px]", active ? "text-primary" : "text-gray-500 dark:text-gray-400")} />
             {item.label}
           </Link>
         );
@@ -76,8 +78,8 @@ function UserMenu({ user }: { user: AppUser }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex w-full items-center gap-3 rounded-lg border bg-white px-3 py-2 text-left hover:bg-gray-50">
-          <UserCircle2 className="size-8 text-gray-400" />
+        <button className="flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
+          <UserCircle2 className="size-8 text-gray-400 dark:text-gray-500" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{user.name}</span>
             <span className="block truncate text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</span>
@@ -105,20 +107,26 @@ function SidebarContent({ user, onNavigate }: { user: AppUser; onNavigate?: () =
       <div className="thin-scrollbar flex-1 overflow-y-auto">
         <NavList user={user} onNavigate={onNavigate} />
       </div>
-      <UserMenu user={user} />
+      <div className="flex flex-col gap-2">
+        <ThemeToggle />
+        <UserMenu user={user} />
+      </div>
     </div>
   );
 }
 
 export function AppShell({ user, timezone, children }: { user: AppUser; timezone: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  // เว้นที่ด้านล่างให้ปุ่มแชททดสอบ (ยกเว้นหน้ากล่องข้อความที่ใช้ความสูงเต็มจอ)
+  const roomForChatButton = can(user.role, "rules:view") && !pathname.startsWith("/inbox");
   return (
     <AppContextProvider value={{ user, timezone }}>
       <div className="min-h-dvh">
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-sidebar lg:block">
           <SidebarContent user={user} />
         </aside>
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-white/95 px-4 backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur lg:hidden">
           <Button variant="ghost" size="icon" onClick={() => setOpen(true)} aria-label="เปิดเมนู">
             <Menu />
           </Button>
@@ -131,8 +139,9 @@ export function AppShell({ user, timezone, children }: { user: AppUser; timezone
           </SheetContent>
         </Sheet>
         <main className="lg:pl-64">
-          <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6">{children}</div>
+          <div className={cn("mx-auto w-full max-w-[1600px] p-4 sm:p-6", roomForChatButton && "pb-24 sm:pb-24")}>{children}</div>
         </main>
+        <TestChatWidget />
       </div>
     </AppContextProvider>
   );

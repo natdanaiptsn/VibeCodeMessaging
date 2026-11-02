@@ -161,7 +161,7 @@ export function TextMessagesView() {
                   <li key={t.id}>
                     <button
                       onClick={() => select(t)}
-                      className={cn("w-full border-b px-4 py-3 text-left hover:bg-gray-50", draft.id === t.id && "bg-accent hover:bg-accent")}
+                      className={cn("w-full border-b px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5", draft.id === t.id && "bg-accent hover:bg-accent")}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-medium">{t.name}</p>
@@ -214,7 +214,7 @@ export function TextMessagesView() {
               {unknownVars.length > 0 && (
                 <p className="text-xs text-destructive">ไม่รู้จักตัวแปร: {unknownVars.map((v) => `{{${v}}}`).join(", ")}</p>
               )}
-              <div className="rounded-md bg-gray-50 p-3 text-xs text-muted-foreground">
+              <div className="rounded-md bg-gray-50 dark:bg-white/5 p-3 text-xs text-muted-foreground">
                 <p className="mb-1 font-medium text-foreground">ตัวแปรที่ใช้ได้</p>
                 <ul className="grid gap-0.5 sm:grid-cols-2">
                   {TEMPLATE_VARIABLES.map((v) => (

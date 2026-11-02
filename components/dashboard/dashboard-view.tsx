@@ -76,7 +76,7 @@ function StatCard({
   tone?: "default" | "success" | "danger";
 }) {
   const iconTone =
-    tone === "success" ? "bg-emerald-50 text-emerald-600" : tone === "danger" ? "bg-red-50 text-red-600" : "bg-accent text-primary";
+    tone === "success" ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : tone === "danger" ? "bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400" : "bg-accent text-primary";
   return (
     <Card className="gap-3 py-4">
       <CardContent className="flex items-start justify-between gap-3 px-4">
@@ -140,7 +140,7 @@ function ConnectionCard({ line, autoReplyEnabled, queue }: Pick<DashboardData, "
           </div>
         </div>
         {status === "FAILED" && line.connectionError && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{line.connectionError}</p>
+          <p className="rounded-md bg-red-50 dark:bg-red-500/15 px-3 py-2 text-xs text-red-700 dark:text-red-300">{line.connectionError}</p>
         )}
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div>
@@ -247,7 +247,7 @@ export function DashboardView() {
                 <ul className="divide-y">
                   {data.recent.map((m) => (
                     <li key={m.id}>
-                      <Link href={`/inbox?customer=${m.customer.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
+                      <Link href={`/inbox?customer=${m.customer.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 dark:hover:bg-white/5">
                         <CustomerAvatar name={m.customer.displayName} pictureUrl={m.customer.pictureUrl} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">

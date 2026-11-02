@@ -81,7 +81,7 @@ function ConversationList({
           </Button>
         </div>
         {showFilters && (
-          <div className="grid gap-2 rounded-lg bg-gray-50 p-2">
+          <div className="grid gap-2 rounded-lg bg-gray-50 dark:bg-white/5 p-2">
             <Input value={filters.messageSearch} onChange={(e) => set({ messageSearch: e.target.value })} placeholder="ค้นหาข้อความ" />
             <Select value={filters.type || "all"} onValueChange={(v) => set({ type: v === "all" ? "" : v })}>
               <SelectTrigger size="sm"><SelectValue placeholder="ประเภทข้อความ" /></SelectTrigger>
@@ -124,7 +124,7 @@ function ConversationList({
                 <button
                   onClick={() => onSelect(c.id)}
                   className={cn(
-                    "flex w-full items-center gap-3 border-b px-3 py-3 text-left transition-colors hover:bg-gray-50",
+                    "flex w-full items-center gap-3 border-b px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/5",
                     selectedId === c.id && "bg-accent hover:bg-accent",
                   )}
                 >
@@ -197,7 +197,7 @@ function Thread({ customerId, onBack }: { customerId: string; onBack: () => void
   const c = customer.data;
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-3 border-b bg-white px-3 py-2.5">
+      <div className="flex items-center gap-3 border-b bg-card px-3 py-2.5">
         <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={onBack} aria-label="กลับ">
           <ArrowLeft />
         </Button>
@@ -219,7 +219,7 @@ function Thread({ customerId, onBack }: { customerId: string; onBack: () => void
           <Info /> <span className="hidden sm:inline">ข้อมูลลูกค้า</span>
         </Button>
       </div>
-      <div ref={scrollRef} className="thin-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto bg-[#eef1f5] p-3 sm:p-4">
+      <div ref={scrollRef} className="thin-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto bg-chat-bg p-3 sm:p-4">
         {messages.error ? (
           <ErrorState message={messages.error.message} onRetry={() => messages.refetch()} />
         ) : messages.isLoading ? (
@@ -242,7 +242,7 @@ function Thread({ customerId, onBack }: { customerId: string; onBack: () => void
                 <div key={m.id}>
                   {showDay && (
                     <div className="my-2 flex justify-center">
-                      <span className="rounded-full bg-black/10 px-3 py-0.5 text-[11px] text-gray-700">{day}</span>
+                      <span className="rounded-full bg-black/10 px-3 py-0.5 text-[11px] text-gray-700 dark:bg-white/10 dark:text-gray-300">{day}</span>
                     </div>
                   )}
                   <MessageBubble m={m} timezone={timezone} />
@@ -273,7 +273,7 @@ export function InboxView() {
         {selected ? (
           <Thread key={selected} customerId={selected} onBack={() => select(null)} />
         ) : (
-          <div className="flex h-full items-center justify-center bg-gray-50">
+          <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-white/5">
             <EmptyState icon={MessagesSquare} title="เลือกการสนทนา" description="เลือกลูกค้าจากรายการด้านซ้ายเพื่อดูประวัติข้อความและตอบกลับ" />
           </div>
         )}
