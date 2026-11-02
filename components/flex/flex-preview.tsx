@@ -29,6 +29,16 @@ function px(v: unknown, map: Record<string, number>): string | undefined {
   return undefined;
 }
 
+/**
+ * ตัด key ที่เป็น undefined ออกจาก style
+ * (ถ้าส่ง paddingTop: undefined คู่กับ padding ตอนเรนเดอร์ฝั่ง client React จะล้างค่า padding ทิ้ง)
+ */
+function compact(style: CSSProperties): CSSProperties {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(style)) if (v !== undefined) out[k] = v;
+  return out as CSSProperties;
+}
+
 function color(v: unknown): string | undefined {
   return typeof v === "string" && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v) ? v : undefined;
 }
@@ -153,7 +163,7 @@ function renderComponent(node: unknown, parentLayout: string | null, ctx: Ctx, k
       };
       const spacing = px(n.spacing, SPACING);
       return (
-        <div key={key} style={style} title={title} {...sel}>
+        <div key={key} style={compact(style)} title={title} {...sel}>
           {contents.length === 0 && ctx.onSelect ? (
             <div className="flex min-h-8 flex-1 items-center justify-center border border-dashed border-gray-300 text-[10px] text-gray-400">
               box ว่าง
@@ -191,7 +201,7 @@ function renderComponent(node: unknown, parentLayout: string | null, ctx: Ctx, k
       };
       const spans = Array.isArray(n.contents) ? (n.contents as Json[]) : null;
       return (
-        <div key={key} style={style} title={title} {...sel}>
+        <div key={key} style={compact(style)} title={title} {...sel}>
           {spans && spans.length
             ? spans.map((s, i) => (
                 <span
