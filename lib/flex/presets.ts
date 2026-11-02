@@ -155,3 +155,58 @@ export const FLEX_PRESETS: FlexPreset[] = [
     },
   },
 ];
+
+/** Flex Message สำหรับกฎทดสอบ “พิมพ์ TestFlex” (หน้า LINE OA Settings ขั้นตอนที่ 5) */
+export const TEST_FLEX_ALT_TEXT = "ทดสอบ Flex Message สำเร็จ";
+
+export const TEST_FLEX_CONTENTS = {
+  type: "bubble",
+  size: "kilo",
+  header: {
+    type: "box",
+    layout: "vertical",
+    backgroundColor: "#06C755",
+    paddingAll: "16px",
+    contents: [
+      { type: "text", text: "✅ TestFlex", color: "#FFFFFF", weight: "bold", size: "xl" },
+      { type: "text", text: "ระบบส่ง Flex Message ได้แล้ว", color: "#E9F9EF", size: "sm", margin: "sm" },
+    ],
+  },
+  body: {
+    type: "box",
+    layout: "vertical",
+    spacing: "md",
+    contents: [
+      { type: "text", text: "สวัสดีคุณ {{displayName}}", weight: "bold", size: "md", color: "#111111", wrap: true },
+      { type: "text", text: "ถ้าเห็นการ์ดนี้ แปลว่าการตอบกลับด้วย Flex Message ทำงานถูกต้อง", size: "sm", color: "#666666", wrap: true },
+      { type: "separator", margin: "md" },
+      {
+        type: "box",
+        layout: "horizontal",
+        margin: "md",
+        contents: [
+          { type: "text", text: "สถานะ", size: "sm", color: "#888888", flex: 2 },
+          { type: "text", text: "เชื่อมต่อแล้ว", size: "sm", color: "#06C755", weight: "bold", flex: 4 },
+        ],
+      },
+      {
+        type: "box",
+        layout: "horizontal",
+        contents: [
+          { type: "text", text: "เวลา", size: "sm", color: "#888888", flex: 2 },
+          { type: "text", text: "{{datetime}}", size: "sm", color: "#111111", flex: 4, wrap: true },
+        ],
+      },
+    ],
+  },
+  footer: {
+    type: "box",
+    layout: "vertical",
+    spacing: "sm",
+    contents: [
+      { type: "button", style: "primary", color: "#06C755", height: "sm", action: { type: "message", label: "ทดสอบข้อความธรรมดา", text: "test" } },
+      { type: "button", style: "link", height: "sm", action: { type: "message", label: "ส่ง TestFlex อีกครั้ง", text: "TestFlex" } },
+    ],
+  },
+} satisfies Record<string, unknown>;
+

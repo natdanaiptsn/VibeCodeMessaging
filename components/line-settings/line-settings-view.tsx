@@ -38,7 +38,8 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { CustomerAvatar } from "@/components/common/customer-avatar";
 import { ErrorState, LoadingState } from "@/components/common/states";
 import { LineTextBubble } from "@/components/text-messages/line-text-bubble";
-import { ChatBackdrop } from "@/components/flex/flex-preview";
+import { ChatBackdrop, FlexPreview } from "@/components/flex/flex-preview";
+import { renderFlexVariables } from "@/lib/flex/render";
 import { buildTemplateValues, renderTemplate } from "@/lib/templates/variables";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
 import { useAppContext, useCan } from "@/hooks/use-app-context";
@@ -78,13 +79,13 @@ type WebhookInfo = { expected: string | null; configured: string | null; active:
 type Quota = { available: boolean; type?: string; limit?: number | null; used?: number; error?: string };
 type ConnectStep = { key: string; label: string; status: "success" | "failed" | "warning" | "skipped"; message: string; hint?: string };
 type TestRuleStatus = {
-  rule: { id: string; isActive: boolean } | null;
-  ruleName: string;
-  keywords: string[];
-  reply: string;
+  rules: { text: { id: string; isActive: boolean } | null; flex: { id: string; isActive: boolean } | null };
+  text: { ruleName: string; keywords: string[]; reply: string };
+  flex: { ruleName: string; keywords: string[]; altText: string; contents: Record<string, unknown> };
   autoReplyEnabled: boolean;
 };
 const TEST_RULE_LABEL = "ทดสอบระบบ (พิมพ์ test)";
+const TEST_FLEX_RULE_LABEL = "ทดสอบ Flex (พิมพ์ TestFlex)";
 
 type ConnectResult = { ok: boolean; steps: ConnectStep[]; webhookActive?: boolean | null; account: Account };
 
@@ -181,6 +182,8 @@ export function LineSettingsView() {
   const quota = useApiQuery<Quota>(["line-quota"], "/api/line/quota", { enabled: connected });
   const testRule = useApiQuery<TestRuleStatus>(["line-test-rule"], "/api/line/test-rule");
   const canManageRules = useCan("rules:manage");
+  const testRulesReady = Boolean(testRule.data?.rules.text?.isActive && testRule.data?.rules.flex?.isActive);
+  const sampleValues = buildTemplateValues({ displayName: "ชื่อของคุณ", userId: "U...", timezone });
 
   const [form, setForm] = useState({ channelId: "", channelSecret: "", channelAccessToken: "" });
   const [showSecret, setShowSecret] = useState(false);
@@ -260,8 +263,10 @@ export function LineSettingsView() {
   const createTestRule = () =>
     run("test-rule", async () => {
       const r = await apiFetch<TestRuleStatus & { created: boolean }>("/api/line/test-rule", { method: "POST" });
-      toast.success(r.created ? "สร้างกฎทดสอบแล้ว — ลองพิมพ์ test ส่งหา LINE OA ได้เลย" : "เปิดใช้งานกฎทดสอบแล้ว");
-      await Promise.all([qc.invalidateQueries({ queryKey: ["line-test-rule"] }), qc.invalidateQueries({ queryKey: ["rules"] })]);
+      toast.success(r.created ? "สร้างกฎทดสอบแล้ว — ลองพิมพ์ test หรือ TestFlex ส่งหา LINE OA ได้เลย" : "เปิดใช้งานกฎทดสอบแล้ว");
+      await Promise.all(
+        [["line-test-rule"], ["rules"], ["flex-templates"], ["text-templates"]].map((queryKey) => qc.invalidateQueries({ queryKey })),
+      );
     });
 
   const clearCredentials = (which: "token" | "all") =>
@@ -609,23 +614,27 @@ export function LineSettingsView() {
                 </span>
               </li>
               <li>
-                สร้างกฎทดสอบ: กดปุ่มด้านล่าง ระบบจะสร้างกฎ <strong>“{TEST_RULE_LABEL}”</strong> ให้ — เมื่อลูกค้าพิมพ์ <Ui>test</Ui> หรือ <Ui>ทดสอบ</Ui>{" "}
-                ระบบจะตอบกลับทันที (กดซ้ำได้ ไม่สร้างกฎซ้ำ)
+                สร้างกฎทดสอบ: กดปุ่มด้านล่าง ระบบจะสร้างกฎให้ 2 กฎ (กดซ้ำได้ ไม่สร้างซ้ำ)
+                <ul className="mt-1.5 list-disc space-y-1 pl-5 text-muted-foreground">
+                  <li>
+                    <strong className="text-foreground">“{TEST_RULE_LABEL}”</strong> — พิมพ์ <Ui>test</Ui> หรือ <Ui>ทดสอบ</Ui> → ตอบเป็นข้อความธรรมดา
+                    (Text Message)
+                  </li>
+                  <li>
+                    <strong className="text-foreground">“{TEST_FLEX_RULE_LABEL}”</strong> — พิมพ์ <Ui>TestFlex</Ui> → ตอบเป็นการ์ด Flex Message ชื่อ
+                    “TestFlex”
+                  </li>
+                </ul>
                 <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                  {testRule.data?.rule?.isActive ? (
-                    <Badge variant="success"><CheckCircle2 /> มีกฎทดสอบแล้ว พร้อมใช้งาน</Badge>
-                  ) : testRule.data?.rule ? (
-                    <Badge variant="warning"><AlertTriangle /> มีกฎทดสอบแต่ถูกปิดอยู่</Badge>
+                  {testRulesReady ? (
+                    <Badge variant="success"><CheckCircle2 /> กฎทดสอบพร้อมใช้งานครบ 2 กฎ</Badge>
+                  ) : testRule.data && (testRule.data.rules.text || testRule.data.rules.flex) ? (
+                    <Badge variant="warning"><AlertTriangle /> กฎทดสอบยังไม่ครบหรือถูกปิดอยู่ — กดปุ่มเพื่อแก้</Badge>
                   ) : null}
                   {canManageRules && (
-                    <Button
-                      size="sm"
-                      variant={testRule.data?.rule?.isActive ? "outline" : "default"}
-                      onClick={createTestRule}
-                      disabled={busy !== null}
-                    >
+                    <Button size="sm" variant={testRulesReady ? "outline" : "default"} onClick={createTestRule} disabled={busy !== null}>
                       {busy === "test-rule" ? <Loader2 className="animate-spin" /> : <FlaskConical />}
-                      {testRule.data?.rule ? (testRule.data.rule.isActive ? "สร้างกฎทดสอบใหม่อีกครั้ง" : "เปิดใช้งานกฎทดสอบ") : "สร้างกฎทดสอบ"}
+                      {testRulesReady ? "สร้างกฎทดสอบใหม่อีกครั้ง" : "สร้างกฎทดสอบ"}
                     </Button>
                   )}
                 </span>
@@ -633,10 +642,16 @@ export function LineSettingsView() {
               <li>
                 พิมพ์ <Ui>test</Ui> ส่งหา LINE OA จากมือถือ ควรได้รับคำตอบภายในไม่กี่วินาที หน้าตาประมาณนี้:
                 <ChatBackdrop className="mt-2 max-w-md">
-                  <LineTextBubble
-                    text={renderTemplate(testRule.data?.reply ?? "", buildTemplateValues({ displayName: "ชื่อของคุณ", userId: "U...", timezone }))}
-                  />
+                  <LineTextBubble text={renderTemplate(testRule.data?.text.reply ?? "", sampleValues)} />
                 </ChatBackdrop>
+              </li>
+              <li>
+                พิมพ์ <Ui>TestFlex</Ui> ควรได้รับการ์ด Flex Message แบบนี้ (กดปุ่มในการ์ดเพื่อทดสอบต่อได้):
+                {testRule.data && (
+                  <ChatBackdrop className="mt-2 max-w-md overflow-hidden">
+                    <FlexPreview contents={renderFlexVariables(testRule.data.flex.contents, sampleValues)} />
+                  </ChatBackdrop>
+                )}
               </li>
               <li>ข้อความที่ส่งและคำตอบจะแสดงในหน้า “กล่องข้อความ” และ “ประวัติการตอบกลับ”</li>
             </Steps>
@@ -650,8 +665,9 @@ export function LineSettingsView() {
             )}
             <Tip>
               <p>
-                ทดสอบเสร็จแล้ว จะเก็บกฎนี้ไว้ ปิด หรือลบก็ได้ที่หน้า <Link className="font-medium underline" href="/auto-reply">ระบบตอบกลับอัตโนมัติ</Link>{" "}
-                (ชื่อกฎ “{TEST_RULE_LABEL}”)
+                ทดสอบเสร็จแล้ว จะเก็บกฎไว้ ปิด หรือลบก็ได้ที่หน้า <Link className="font-medium underline" href="/auto-reply">ระบบตอบกลับอัตโนมัติ</Link>{" "}
+                (ชื่อกฎ “{TEST_RULE_LABEL}” และ “{TEST_FLEX_RULE_LABEL}”) ส่วนการ์ด TestFlex แก้หน้าตาได้ที่หน้า{" "}
+                <Link className="font-medium underline" href="/flex-builder">Flex Message Builder</Link>
               </p>
             </Tip>
             <div className="rounded-lg border p-3">
@@ -676,7 +692,7 @@ export function LineSettingsView() {
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
                 <li>ตรวจว่าเปิด <strong>Webhook</strong> แล้ว (ขั้นตอนที่ 4) — ถ้าหน้านี้ไม่แสดงว่าได้รับข้อความ แปลว่า LINE ยังไม่ได้ส่งมา</li>
                 <li>ได้รับข้อความแต่ไม่ตอบ: ดูหน้า <Link className="underline" href="/reply-logs">ประวัติการตอบกลับ</Link> ว่ามีข้อผิดพลาดอะไร</li>
-                <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href="/settings">ตั้งค่าระบบ</Link> และพิมพ์ <Ui>test</Ui> ตรงตัว (ไม่มีคำอื่นต่อท้าย)</li>
+                <li>ตรวจว่าเปิด “ระบบตอบกลับอัตโนมัติ” ไว้ที่หน้า <Link className="underline" href="/settings">ตั้งค่าระบบ</Link> และพิมพ์ <Ui>test</Ui> หรือ <Ui>TestFlex</Ui> ตรงตัว (ไม่มีคำอื่นต่อท้าย)</li>
                 <li>ได้คำตอบซ้ำ 2 ข้อความ: ปิด “ข้อความตอบกลับอัตโนมัติ” ใน LINE OA Manager (ขั้นตอนที่ 4 ข้อ 3)</li>
               </ul>
             </div>

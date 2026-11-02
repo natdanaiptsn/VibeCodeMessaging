@@ -71,3 +71,13 @@ describe("validateFlexContainer", () => {
     expect(validateFlexContainer(img("wide")).valid).toBe(false);
   });
 });
+
+describe("TestFlex preset", () => {
+  it("passes LINE Flex validation (before and after variable substitution)", async () => {
+    const { TEST_FLEX_ALT_TEXT, TEST_FLEX_CONTENTS } = await import("@/lib/flex/presets");
+    const { renderFlexVariables } = await import("@/lib/flex/render");
+    expect(validateFlexMessage(TEST_FLEX_ALT_TEXT, TEST_FLEX_CONTENTS).errors).toEqual([]);
+    const rendered = renderFlexVariables(TEST_FLEX_CONTENTS, { displayName: "สมชาย", datetime: "2 พฤศจิกายน 2569 22:30" });
+    expect(validateFlexMessage(TEST_FLEX_ALT_TEXT, rendered).errors).toEqual([]);
+  });
+});

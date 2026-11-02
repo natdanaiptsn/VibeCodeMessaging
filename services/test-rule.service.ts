@@ -1,66 +1,127 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { normalizeText } from "@/lib/auto-reply/normalize";
+import { validateFlexMessage } from "@/lib/flex/validate";
 import { invalidateRuleCache } from "@/services/auto-reply-engine.service";
+import type { Prisma } from "@/lib/generated/prisma/client";
+import { TEST_FLEX_ALT_TEXT, TEST_FLEX_CONTENTS } from "@/lib/flex/presets";
 
-/** กฎสำหรับทดสอบการเชื่อมต่อ: ลูกค้าพิมพ์ "test" หรือ "ทดสอบ" แล้วได้รับคำตอบ */
+export { TEST_FLEX_ALT_TEXT, TEST_FLEX_CONTENTS };
+
+/**
+ * กฎสำหรับทดสอบการเชื่อมต่อ (สร้างจากขั้นตอนที่ 5 ของหน้า LINE OA Settings)
+ * - พิมพ์ "test" / "ทดสอบ"        → ตอบด้วย Text Message
+ * - พิมพ์ "TestFlex" / "test flex" → ตอบด้วย Flex Message ชื่อ "TestFlex"
+ */
 export const TEST_RULE_NAME = "ทดสอบระบบ (พิมพ์ test)";
 export const TEST_TEMPLATE_NAME = "ข้อความทดสอบระบบ";
 export const TEST_KEYWORDS = ["test", "ทดสอบ"];
 export const TEST_REPLY =
   "✅ ระบบตอบกลับอัตโนมัติทำงานแล้ว!\nสวัสดีคุณ {{displayName}}\nได้รับข้อความของคุณเมื่อ {{datetime}}";
 
-export async function getTestRuleStatus() {
-  const rule = await prisma.replyRule.findFirst({
-    where: { name: TEST_RULE_NAME },
-    select: { id: true, isActive: true },
+export const TEST_FLEX_RULE_NAME = "ทดสอบ Flex (พิมพ์ TestFlex)";
+export const TEST_FLEX_TEMPLATE_NAME = "TestFlex";
+export const TEST_FLEX_KEYWORDS = ["testflex", "test flex"];
+export type TestRuleKey = "text" | "flex";
+type RuleStatus = { id: string; isActive: boolean } | null;
+
+export async function getTestRuleStatus(): Promise<Record<TestRuleKey, RuleStatus>> {
+  const rules = await prisma.replyRule.findMany({
+    where: { name: { in: [TEST_RULE_NAME, TEST_FLEX_RULE_NAME] } },
+    select: { id: true, name: true, isActive: true },
   });
-  return rule;
+  const pick = (name: string) => {
+    const r = rules.find((x) => x.name === name);
+    return r ? { id: r.id, isActive: r.isActive } : null;
+  };
+  return { text: pick(TEST_RULE_NAME), flex: pick(TEST_FLEX_RULE_NAME) };
 }
 
-/** สร้างกฎทดสอบ (หรือเปิดใช้งาน/ซ่อมกฎเดิม) — เรียกซ้ำได้โดยไม่สร้างซ้ำ */
-export async function ensureTestRule(userId: string): Promise<{ created: boolean; ruleId: string }> {
-  const template =
-    (await prisma.replyTemplate.findFirst({ where: { name: TEST_TEMPLATE_NAME } })) ??
-    (await prisma.replyTemplate.create({
-      data: { name: TEST_TEMPLATE_NAME, content: TEST_REPLY, description: "ใช้กับกฎทดสอบระบบ", createdById: userId },
-    }));
-  const keywords = TEST_KEYWORDS.map((k) => ({ keyword: k, normalizedKeyword: normalizeText(k) }));
-  const existing = await prisma.replyRule.findFirst({ where: { name: TEST_RULE_NAME }, select: { id: true } });
-
-  const ruleData = {
+async function upsertRule(params: {
+  userId: string;
+  name: string;
+  description: string;
+  keywords: string[];
+  replyType: "TEXT" | "FLEX";
+  textTemplateId: string | null;
+  flexTemplateId: string | null;
+}): Promise<{ created: boolean; ruleId: string }> {
+  const keywords = params.keywords.map((k) => ({ keyword: k, normalizedKeyword: normalizeText(k) }));
+  const data = {
     isActive: true,
-    priority: 1000, // สูงสุด เพื่อให้ตอบด้วยกฎนี้เสมอเมื่อพิมพ์ test
+    priority: 1000, // สูงสุด เพื่อให้ตอบด้วยกฎทดสอบเสมอ
     triggerType: "TEXT" as const,
     matchType: "EXACT" as const,
     keywordLogic: "ANY" as const,
     caseSensitive: false,
-    replyType: "TEXT" as const,
-    textTemplateId: template.id,
-    flexTemplateId: null,
-    updatedById: userId,
+    replyType: params.replyType,
+    textTemplateId: params.textTemplateId,
+    flexTemplateId: params.flexTemplateId,
+    updatedById: params.userId,
   };
-
-  let ruleId: string;
+  const existing = await prisma.replyRule.findFirst({ where: { name: params.name }, select: { id: true } });
   if (existing) {
     await prisma.$transaction([
       prisma.replyKeyword.deleteMany({ where: { ruleId: existing.id } }),
-      prisma.replyRule.update({ where: { id: existing.id }, data: { ...ruleData, keywords: { create: keywords } } }),
+      prisma.replyRule.update({ where: { id: existing.id }, data: { ...data, keywords: { create: keywords } } }),
     ]);
-    ruleId = existing.id;
-  } else {
-    const rule = await prisma.replyRule.create({
-      data: {
-        ...ruleData,
-        name: TEST_RULE_NAME,
-        description: "สร้างจากหน้า LINE OA Settings เพื่อทดสอบการเชื่อมต่อ — ลบหรือปิดได้เมื่อทดสอบเสร็จ",
-        createdById: userId,
-        keywords: { create: keywords },
-      },
-      select: { id: true },
-    });
-    ruleId = rule.id;
+    return { created: false, ruleId: existing.id };
   }
+  const rule = await prisma.replyRule.create({
+    data: { ...data, name: params.name, description: params.description, createdById: params.userId, keywords: { create: keywords } },
+    select: { id: true },
+  });
+  return { created: true, ruleId: rule.id };
+}
+
+/** สร้างกฎทดสอบทั้ง 2 แบบ (หรือเปิดใช้งาน/ซ่อมกฎเดิม) — เรียกซ้ำได้โดยไม่สร้างซ้ำ */
+export async function ensureTestRules(userId: string) {
+  const textTemplate =
+    (await prisma.replyTemplate.findFirst({ where: { name: TEST_TEMPLATE_NAME } })) ??
+    (await prisma.replyTemplate.create({
+      data: { name: TEST_TEMPLATE_NAME, content: TEST_REPLY, description: "ใช้กับกฎทดสอบระบบ", createdById: userId },
+    }));
+
+  // ใช้ Flex "TestFlex" เดิมถ้ายังถูกต้อง ไม่เช่นนั้นสร้าง/แก้ให้เป็นแบบมาตรฐาน
+  const existingFlex = await prisma.flexTemplate.findFirst({ where: { name: TEST_FLEX_TEMPLATE_NAME } });
+  const flexValid = existingFlex ? validateFlexMessage(existingFlex.altText, existingFlex.contents).valid : false;
+  const flexTemplate =
+    existingFlex && flexValid
+      ? existingFlex
+      : existingFlex
+        ? await prisma.flexTemplate.update({
+            where: { id: existingFlex.id },
+            data: { altText: TEST_FLEX_ALT_TEXT, containerType: "bubble", contents: TEST_FLEX_CONTENTS as Prisma.InputJsonValue },
+          })
+        : await prisma.flexTemplate.create({
+            data: {
+              name: TEST_FLEX_TEMPLATE_NAME,
+              description: "Flex Message สำหรับทดสอบระบบ (ตอบเมื่อพิมพ์ TestFlex)",
+              altText: TEST_FLEX_ALT_TEXT,
+              containerType: "bubble",
+              contents: TEST_FLEX_CONTENTS as Prisma.InputJsonValue,
+              createdById: userId,
+            },
+          });
+
+  const text = await upsertRule({
+    userId,
+    name: TEST_RULE_NAME,
+    description: "สร้างจากหน้า LINE OA Settings เพื่อทดสอบการเชื่อมต่อ — ลบหรือปิดได้เมื่อทดสอบเสร็จ",
+    keywords: TEST_KEYWORDS,
+    replyType: "TEXT",
+    textTemplateId: textTemplate.id,
+    flexTemplateId: null,
+  });
+  const flex = await upsertRule({
+    userId,
+    name: TEST_FLEX_RULE_NAME,
+    description: "สร้างจากหน้า LINE OA Settings เพื่อทดสอบการตอบกลับด้วย Flex Message — ลบหรือปิดได้เมื่อทดสอบเสร็จ",
+    keywords: TEST_FLEX_KEYWORDS,
+    replyType: "FLEX",
+    textTemplateId: null,
+    flexTemplateId: flexTemplate.id,
+  });
   invalidateRuleCache();
-  return { created: !existing, ruleId };
+  return { text, flex };
 }
