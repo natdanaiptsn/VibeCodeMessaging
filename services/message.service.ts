@@ -112,7 +112,7 @@ export type ConversationQuery = {
 };
 
 /** รายการแชทสำหรับ Inbox (เรียงตามข้อความล่าสุด) */
-export async function listConversations(q: ConversationQuery) {
+export async function listConversations(projectId: string, q: ConversationQuery) {
   const messageFilter: Prisma.MessageWhereInput = {
     ...(q.messageSearch ? { text: { contains: q.messageSearch, mode: "insensitive" } } : {}),
     ...(q.type ? { type: q.type } : {}),
@@ -120,6 +120,7 @@ export async function listConversations(q: ConversationQuery) {
   };
   const hasMessageFilter = Object.keys(messageFilter).length > 0;
   const where: Prisma.CustomerWhereInput = {
+    projectId,
     lastMessageAt: { not: null },
     ...(q.search
       ? { OR: [{ displayName: { contains: q.search, mode: "insensitive" } }, { lineUserId: { contains: q.search } }] }

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useCallback, useContext } from "react";
 import { can, type Permission, type Role } from "@/lib/auth/permissions";
 
 export type AppUser = {
@@ -11,7 +11,17 @@ export type AppUser = {
   role: Role;
   passwordManagedByEnv: boolean;
 };
-export type AppContextValue = { user: AppUser; timezone: string };
+
+/** โปรเจกต์ที่กำลังเปิดอยู่ (ไม่มีข้อมูลลับ) */
+export type AppProject = {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  displayName: string | null;
+  pictureUrl: string | null;
+};
+
+export type AppContextValue = { user: AppUser; timezone: string; project: AppProject | null };
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -25,4 +35,18 @@ export function useAppContext(): AppContextValue {
 
 export function useCan(permission: Permission): boolean {
   return can(useAppContext().user.role, permission);
+}
+
+/** โปรเจกต์ปัจจุบัน (ใช้ได้เฉพาะหน้าภายใน /p/{projectId}/...) */
+export function useProject(): AppProject {
+  const { project } = useAppContext();
+  if (!project) throw new Error("useProject must be used inside a project page");
+  return project;
+}
+
+/** สร้างลิงก์ภายในโปรเจกต์ปัจจุบัน เช่น projectPath("/inbox") → /p/{id}/inbox */
+export function useProjectPath(): (path: string) => string {
+  const { project } = useAppContext();
+  const id = project?.id;
+  return useCallback((path: string) => (id ? `/p/${id}${path}` : path), [id]);
 }

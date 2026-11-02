@@ -17,7 +17,7 @@ import { MessageBubble, type ThreadMessage } from "@/components/inbox/message-bu
 import { Composer } from "@/components/inbox/composer";
 import { apiFetch, useApiQuery } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useAppContext, useCan } from "@/hooks/use-app-context";
+import { useAppContext, useCan, useProjectPath } from "@/hooks/use-app-context";
 import { formatDate, formatRelative } from "@/lib/format";
 import { MESSAGE_TYPE_LABELS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
@@ -259,10 +259,11 @@ function Thread({ customerId, onBack }: { customerId: string; onBack: () => void
 }
 
 export function InboxView() {
+  const projectPath = useProjectPath();
   const router = useRouter();
   const params = useSearchParams();
   const selected = params.get("customer");
-  const select = (id: string | null) => router.replace(id ? `/inbox?customer=${id}` : "/inbox", { scroll: false });
+  const select = (id: string | null) => router.replace(id ? projectPath(`/inbox?customer=${id}`) : projectPath("/inbox"), { scroll: false });
 
   return (
     <Card className="h-[calc(100dvh-7.5rem)] min-h-[520px] flex-row gap-0 overflow-hidden p-0 lg:h-[calc(100dvh-3rem)]">

@@ -76,7 +76,7 @@ import { renderFlexVariables } from "@/lib/flex/render";
 import { sampleTemplateValues } from "@/lib/templates/variables";
 import { formatBytes } from "@/lib/format";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
-import { useCan } from "@/hooks/use-app-context";
+import { useCan, useProjectPath } from "@/hooks/use-app-context";
 import { cn } from "@/lib/utils";
 
 export type FlexTemplateData = { id: string; name: string; description: string | null; altText: string; contents: unknown };
@@ -110,6 +110,7 @@ export function FlexBuilder({
   template: FlexTemplateData | null;
   initialPreset?: { name: string; altText: string; contents: unknown };
 }) {
+  const projectPath = useProjectPath();
   const router = useRouter();
   const qc = useQueryClient();
   const canEdit = useCan("flex:manage");
@@ -298,7 +299,7 @@ export function FlexBuilder({
       setSavedSnapshot(JSON.stringify({ c: json, n: name, a: altText, d: description }));
       toast.success("บันทึก Template แล้ว");
       await qc.invalidateQueries({ queryKey: ["flex-templates"] });
-      if (!template) router.replace(`/flex-builder/${saved.id}`);
+      if (!template) router.replace(projectPath(`/flex-builder/${saved.id}`));
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
@@ -446,7 +447,7 @@ export function FlexBuilder({
     <DndContext sensors={sensors} collisionDetection={collision} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveDrag(null)}>
       <div className="mb-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="ghost" size="sm"><Link href="/flex-builder"><ArrowLeft /> Template ทั้งหมด</Link></Button>
+          <Button asChild variant="ghost" size="sm"><Link href={projectPath("/flex-builder")}><ArrowLeft /> Template ทั้งหมด</Link></Button>
           <h1 className="text-lg font-semibold sm:text-xl">Flex Message Builder</h1>
           {dirty && <Badge variant="warning">ยังไม่ได้บันทึก</Badge>}
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -597,6 +598,7 @@ function LoadDialog({
   currentId?: string;
   dirty: boolean;
 }) {
+  const projectPath = useProjectPath();
   const router = useRouter();
   const saved = useApiQuery<FlexTemplateData[]>(["flex-templates"], open ? "/api/flex-templates" : null);
   const confirmReplace = () => !dirty || window.confirm("เนื้อหาปัจจุบันยังไม่ได้บันทึก ต้องการแทนที่หรือไม่?");
@@ -632,7 +634,7 @@ function LoadDialog({
                     <span className="min-w-0 flex-1 truncate text-sm">{t.name}</span>
                     <Button variant="ghost" size="sm" onClick={() => confirmReplace() && onLoad(t.contents, { altText: t.altText })}>ใช้เป็นต้นแบบ</Button>
                     {t.id !== currentId && (
-                      <Button variant="outline" size="sm" onClick={() => confirmReplace() && router.push(`/flex-builder/${t.id}`)}>เปิดแก้ไข</Button>
+                      <Button variant="outline" size="sm" onClick={() => confirmReplace() && router.push(projectPath(`/flex-builder/${t.id}`))}>เปิดแก้ไข</Button>
                     )}
                   </li>
                 ))}

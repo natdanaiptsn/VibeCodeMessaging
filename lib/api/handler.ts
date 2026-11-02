@@ -1,7 +1,8 @@
 import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
-import { ApiError, forbidden, tooManyRequests, unauthorized } from "@/lib/errors";
+import { ApiError, badRequest, forbidden, notFound, tooManyRequests, unauthorized } from "@/lib/errors";
+import { prisma } from "@/lib/prisma";
 import { getSession, type AuthSession } from "@/lib/auth/session";
 import { can, type Permission } from "@/lib/auth/permissions";
 import { getClientIp, getUserAgent, isSameOrigin } from "@/lib/request";
@@ -28,6 +29,25 @@ export type RouteContext<P> = {
 };
 
 type PublicRouteContext<P> = Omit<RouteContext<P>, "session"> & { session: AuthSession | null };
+
+/** โปรเจกต์ที่กำลังทำงานอยู่ (ไม่มีข้อมูลลับ) */
+export type ProjectRef = { id: string; name: string; isDefault: boolean };
+
+export type ProjectRouteContext<P> = RouteContext<P> & { project: ProjectRef };
+
+/** Header ที่หน้าเว็บส่งมาเพื่อบอกว่ากำลังทำงานในโปรเจกต์ใด */
+export const PROJECT_HEADER = "x-project-id";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function resolveProject(req: NextRequest): Promise<ProjectRef> {
+  const id = req.headers.get(PROJECT_HEADER) ?? req.nextUrl.searchParams.get("projectId");
+  if (!id) throw badRequest("ไม่ได้ระบุโปรเจกต์");
+  if (!UUID_RE.test(id)) throw badRequest("รหัสโปรเจกต์ไม่ถูกต้อง");
+  const project = await prisma.project.findUnique({ where: { id }, select: { id: true, name: true, isDefault: true } });
+  if (!project) throw notFound("ไม่พบโปรเจกต์ (อาจถูกลบไปแล้ว)");
+  return project;
+}
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -111,6 +131,17 @@ export function route<P = Record<string, never>>(
       return handleError(err);
     }
   };
+}
+
+/**
+ * Route Handler ที่ทำงานภายในโปรเจกต์ — ต้องเข้าสู่ระบบ และระบุโปรเจกต์ผ่าน Header "x-project-id"
+ * (หรือ query ?projectId= สำหรับลิงก์รูป/ไฟล์) ข้อมูลทุกอย่างใน handler ต้องกรองด้วย ctx.project.id
+ */
+export function projectRoute<P = Record<string, never>>(
+  opts: RouteOptions,
+  handler: (ctx: ProjectRouteContext<P>) => Promise<Response | unknown>,
+) {
+  return route<P>(opts, async (ctx) => handler({ ...ctx, project: await resolveProject(ctx.req) }));
 }
 
 /** Route Handler สาธารณะ (ไม่บังคับเข้าสู่ระบบ) */

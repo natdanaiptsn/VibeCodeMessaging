@@ -16,6 +16,8 @@ export const PERMISSIONS = {
   "media:upload": "ADMIN",
   "settings:view": "ADMIN",
   "settings:manage": "ADMIN",
+  "projects:manage": "ADMIN", // สร้าง / เปลี่ยนชื่อโปรเจกต์
+  "projects:delete": "OWNER",
   "line:view": "ADMIN",
   "line:manage": "OWNER",
   "users:manage": "OWNER",

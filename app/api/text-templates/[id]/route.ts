@@ -1,26 +1,26 @@
-import { route, readJson } from "@/lib/api/handler";
+import { projectRoute, readJson } from "@/lib/api/handler";
 import { prisma } from "@/lib/prisma";
 import { textTemplateSchema } from "@/lib/validation/templates";
 import { idParamsSchema } from "@/lib/validation/common";
 import { conflict, notFound } from "@/lib/errors";
-import { textTemplateUsage, updateTextTemplate } from "@/services/text-template.service";
+import { getTextTemplate, textTemplateUsage, updateTextTemplate } from "@/services/text-template.service";
 import { invalidateRuleCache } from "@/services/auto-reply-engine.service";
 import { auditFromCtx } from "@/lib/audit";
 
-export const GET = route<{ id: string }>({ permission: "templates:view" }, async ({ params }) => {
+export const GET = projectRoute<{ id: string }>({ permission: "templates:view" }, async ({ params, project }) => {
   const { id } = idParamsSchema.parse(params);
-  const t = await prisma.replyTemplate.findUnique({ where: { id } });
+  const t = await getTextTemplate(project.id, id);
   if (!t) throw notFound("ไม่พบข้อความ");
-  return { ...t, usage: await textTemplateUsage(id) };
+  return { ...t, usage: await textTemplateUsage(project.id, id) };
 });
 
-export const PUT = route<{ id: string }>({ permission: "templates:manage" }, async (ctx) => {
+export const PUT = projectRoute<{ id: string }>({ permission: "templates:manage" }, async (ctx) => {
   const { id } = idParamsSchema.parse(ctx.params);
-  const before = await prisma.replyTemplate.findUnique({ where: { id } });
+  const before = await getTextTemplate(ctx.project.id, id);
   if (!before) throw notFound("ไม่พบข้อความ");
   const input = textTemplateSchema.parse(await readJson(ctx.req));
   const t = await updateTextTemplate(id, input);
-  invalidateRuleCache();
+  invalidateRuleCache(ctx.project.id);
   await auditFromCtx(ctx)({
     action: "text_template.update",
     entityType: "ReplyTemplate",
@@ -31,11 +31,11 @@ export const PUT = route<{ id: string }>({ permission: "templates:manage" }, asy
   return t;
 });
 
-export const DELETE = route<{ id: string }>({ permission: "templates:manage" }, async (ctx) => {
+export const DELETE = projectRoute<{ id: string }>({ permission: "templates:manage" }, async (ctx) => {
   const { id } = idParamsSchema.parse(ctx.params);
-  const t = await prisma.replyTemplate.findUnique({ where: { id } });
+  const t = await getTextTemplate(ctx.project.id, id);
   if (!t) throw notFound("ไม่พบข้อความ");
-  const usage = await textTemplateUsage(id);
+  const usage = await textTemplateUsage(ctx.project.id, id);
   if (usage.rules > 0) throw conflict(`ไม่สามารถลบได้ เนื่องจากถูกใช้งานในกฎตอบกลับ ${usage.rules} กฎ`);
   if (usage.usedAsDefault) throw conflict("ไม่สามารถลบได้ เนื่องจากถูกใช้เป็น Default Reply");
   await prisma.replyTemplate.delete({ where: { id } });

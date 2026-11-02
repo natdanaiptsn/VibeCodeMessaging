@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Loader2, Plus, Save, ShieldCheck, Trash2, UserCog } from "lucide-react";
 import { toast } from "sonner";
@@ -23,7 +24,7 @@ import { apiFetch, ApiClientError, useApiMutation, useApiQuery } from "@/hooks/u
 import { useAppContext, useCan } from "@/hooks/use-app-context";
 import { formatDateTime } from "@/lib/format";
 import { ROLE_LABELS, type Role } from "@/lib/auth/permissions";
-import type { SystemSettings } from "@/lib/validation/settings";
+import { DEFAULT_SETTINGS, type SystemSettings } from "@/lib/validation/settings";
 
 const TIMEZONES = ["Asia/Bangkok", "Asia/Ho_Chi_Minh", "Asia/Jakarta", "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Manila", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Taipei", "Asia/Kolkata", "Europe/London", "UTC"];
 
@@ -59,9 +60,11 @@ function SaveSection({ section, draft, original }: { section: keyof SystemSettin
   const save = async () => {
     setSaving(true);
     try {
-      await apiFetch("/api/settings", { method: "PUT", body: { [section]: draft[section] } });
+      // ระบบ Log ใช้ร่วมกันทุกโปรเจกต์ — ส่วนอื่นเป็นของโปรเจกต์ที่เปิดอยู่
+      if (section === "logging") await apiFetch("/api/settings/logging", { method: "PUT", body: draft.logging });
+      else await apiFetch("/api/settings", { method: "PUT", body: { [section]: draft[section] } });
       toast.success("บันทึกการตั้งค่าแล้ว");
-      await qc.invalidateQueries({ queryKey: ["settings"] });
+      await qc.invalidateQueries({ queryKey: [section === "logging" ? "settings-logging" : "settings"] });
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
@@ -434,7 +437,7 @@ function UsersTab() {
   );
 }
 
-type AuditRow = { id: string; action: string; entityType: string; entityId: string | null; summary: string | null; ipAddress: string | null; createdAt: string; user: { name: string; email: string | null } | null };
+type AuditRow = { id: string; action: string; entityType: string; entityId: string | null; summary: string | null; ipAddress: string | null; createdAt: string; user: { name: string; email: string | null } | null; project: { id: string; name: string } | null };
 
 function AuditTab() {
   const { timezone } = useAppContext();
@@ -456,7 +459,7 @@ function AuditTab() {
               <SelectItem value="ReplyTemplate">Text Template</SelectItem>
               <SelectItem value="FlexTemplate">Flex Template</SelectItem>
               <SelectItem value="SystemSetting">ตั้งค่าระบบ</SelectItem>
-              <SelectItem value="LineAccount">LINE OA</SelectItem>
+              <SelectItem value="Project">โปรเจกต์ / LINE OA</SelectItem>
               <SelectItem value="User">ผู้ใช้</SelectItem>
               <SelectItem value="Customer">ลูกค้า</SelectItem>
             </SelectContent>
@@ -476,6 +479,7 @@ function AuditTab() {
               <TableRow>
                 <TableHead>เวลา</TableHead>
                 <TableHead>ผู้ใช้</TableHead>
+                <TableHead className="hidden md:table-cell">โปรเจกต์</TableHead>
                 <TableHead>การกระทำ</TableHead>
                 <TableHead className="hidden lg:table-cell">IP</TableHead>
               </TableRow>
@@ -485,6 +489,7 @@ function AuditTab() {
                 <TableRow key={a.id}>
                   <TableCell className="text-xs whitespace-nowrap">{formatDateTime(a.createdAt, timezone)}</TableCell>
                   <TableCell className="text-sm">{a.user?.name ?? "ระบบ"}</TableCell>
+                  <TableCell className="hidden max-w-40 truncate text-sm text-muted-foreground md:table-cell">{a.project?.name ?? "-"}</TableCell>
                   <TableCell>
                     <p className="text-sm">{a.summary ?? a.action}</p>
                     <p className="font-mono text-[11px] text-muted-foreground">{a.action}</p>
@@ -501,40 +506,79 @@ function AuditTab() {
   );
 }
 
-export function SettingsView() {
+/** ตั้งค่าของโปรเจกต์ที่เปิดอยู่ (การตอบกลับ / Default Reply) */
+function ProjectSettings() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const tab = params.get("tab") === "auto-reply" ? "auto-reply" : "general";
+  const settings = useApiQuery<SystemSettings>(["settings"], "/api/settings");
+  return (
+    <>
+      <PageHeader title="ตั้งค่าโปรเจกต์" description="การทำงานของระบบตอบกลับและ Default Reply ของโปรเจกต์นี้ (แต่ละโปรเจกต์ตั้งค่าแยกกัน)" />
+      <Tabs value={tab} onValueChange={(v) => router.replace(`${pathname}?tab=${v}`, { scroll: false })}>
+        <TabsList>
+          <TabsTrigger value="general">ทั่วไป</TabsTrigger>
+          <TabsTrigger value="auto-reply">Default Reply</TabsTrigger>
+        </TabsList>
+        {settings.error ? (
+          <ErrorState message={settings.error.message} onRetry={() => settings.refetch()} />
+        ) : !settings.data ? (
+          <LoadingState />
+        ) : (
+          <SettingsSections key={settings.dataUpdatedAt} original={settings.data} />
+        )}
+      </Tabs>
+      <p className="mt-4 text-xs text-muted-foreground">
+        รหัสผ่าน ผู้ใช้งาน Audit Log และระบบ Log ใช้ร่วมกันทุกโปรเจกต์ — ตั้งค่าได้ที่{" "}
+        <Link href="/settings" className="font-medium text-primary hover:underline">บัญชีและผู้ใช้งาน</Link>
+      </p>
+    </>
+  );
+}
+
+/** ตั้งค่าระดับบัญชี (ใช้ร่วมกันทุกโปรเจกต์) */
+function AccountSettings() {
   const router = useRouter();
   const params = useSearchParams();
   const canUsers = useCan("users:manage");
   const canAudit = useCan("audit:view");
   const canSettings = useCan("settings:view");
-  const requested = params.get("tab") ?? (canSettings ? "general" : "account");
-  const tab = !canSettings && ["general", "auto-reply", "logging"].includes(requested) ? "account" : requested;
-  const settings = useApiQuery<SystemSettings>(["settings"], canSettings ? "/api/settings" : null);
+  const requested = params.get("tab") ?? "account";
+  const allowed = new Set(["account", ...(canUsers ? ["users"] : []), ...(canAudit ? ["audit"] : []), ...(canSettings ? ["logging"] : [])]);
+  const tab = allowed.has(requested) ? requested : "account";
+  const logging = useApiQuery<SystemSettings["logging"]>(["settings-logging"], canSettings ? "/api/settings/logging" : null);
 
   return (
     <>
-      <PageHeader title="ตั้งค่าระบบ" description="การทำงานของระบบตอบกลับ, Default Reply, Log และบัญชีผู้ใช้" />
+      <PageHeader title="บัญชีและผู้ใช้งาน" description="รหัสผ่าน ผู้ใช้งาน Audit Log และระบบ Log — ใช้ร่วมกันทุกโปรเจกต์" />
       <Tabs value={tab} onValueChange={(v) => router.replace(`/settings?tab=${v}`, { scroll: false })}>
         <TabsList>
-          {canSettings && <TabsTrigger value="general">ทั่วไป</TabsTrigger>}
-          {canSettings && <TabsTrigger value="auto-reply">Default Reply</TabsTrigger>}
-          {canSettings && <TabsTrigger value="logging">ระบบ Log</TabsTrigger>}
           <TabsTrigger value="account">รหัสผ่าน</TabsTrigger>
           {canUsers && <TabsTrigger value="users">ผู้ใช้งาน</TabsTrigger>}
           {canAudit && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
+          {canSettings && <TabsTrigger value="logging">ระบบ Log</TabsTrigger>}
         </TabsList>
-        {canSettings && ["general", "auto-reply", "logging"].includes(tab) &&
-          (settings.error ? (
-            <ErrorState message={settings.error.message} onRetry={() => settings.refetch()} />
-          ) : !settings.data ? (
-            <LoadingState />
-          ) : (
-            <SettingsSections key={settings.dataUpdatedAt} original={settings.data} />
-          ))}
         <TabsContent value="account"><AccountTab /></TabsContent>
         {canUsers && <TabsContent value="users"><UsersTab /></TabsContent>}
         {canAudit && <TabsContent value="audit"><AuditTab /></TabsContent>}
+        {canSettings &&
+          tab === "logging" &&
+          (logging.error ? (
+            <ErrorState message={logging.error.message} onRetry={() => logging.refetch()} />
+          ) : !logging.data ? (
+            <LoadingState />
+          ) : (
+            <SettingsSections key={logging.dataUpdatedAt} original={{ ...DEFAULT_SETTINGS, logging: logging.data }} />
+          ))}
       </Tabs>
+      <p className="mt-4 text-xs text-muted-foreground">
+        การตั้งค่าระบบตอบกลับอัตโนมัติและ Default Reply อยู่ในแต่ละโปรเจกต์ (เมนู “ตั้งค่าโปรเจกต์”)
+      </p>
     </>
   );
+}
+
+export function SettingsView({ scope }: { scope: "project" | "account" }) {
+  return scope === "project" ? <ProjectSettings /> : <AccountSettings />;
 }

@@ -7,10 +7,10 @@ import type { Customer, MessageType, Prisma } from "@/lib/generated/prisma/clien
 
 const PROFILE_STALE_MS = 24 * 60 * 60 * 1000;
 
-export async function upsertCustomer(lineAccountId: string, lineUserId: string) {
+export async function upsertCustomer(projectId: string, lineUserId: string) {
   return prisma.customer.upsert({
-    where: { lineAccountId_lineUserId: { lineAccountId, lineUserId } },
-    create: { lineAccountId, lineUserId, followedAt: new Date() },
+    where: { projectId_lineUserId: { projectId, lineUserId } },
+    create: { projectId, lineUserId, followedAt: new Date() },
     update: {},
   });
 }
@@ -66,8 +66,13 @@ export type CustomerListQuery = {
   pageSize: number;
 };
 
-export async function listCustomers(q: CustomerListQuery) {
+export async function getCustomer(projectId: string, id: string) {
+  return prisma.customer.findFirst({ where: { id, projectId } });
+}
+
+export async function listCustomers(projectId: string, q: CustomerListQuery) {
   const where: Prisma.CustomerWhereInput = {
+    projectId,
     ...(q.search
       ? {
           OR: [

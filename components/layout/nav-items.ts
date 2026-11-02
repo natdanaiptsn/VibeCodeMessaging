@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { Permission } from "@/lib/auth/permissions";
 
+/** เมนูภายในโปรเจกต์ (href เป็น path ต่อท้าย /p/{projectId}) */
 export const NAV_ITEMS: { href: string; label: string; icon: typeof Bot; permission: Permission }[] = [
   { href: "/inbox", label: "กล่องข้อความ", icon: MessagesSquare, permission: "inbox:view" },
   { href: "/customers", label: "ลูกค้า", icon: Users, permission: "customers:view" },
@@ -16,5 +17,5 @@ export const NAV_ITEMS: { href: string; label: string; icon: typeof Bot; permiss
   { href: "/text-messages", label: "Text Message", icon: MessageSquareText, permission: "templates:view" },
   { href: "/flex-builder", label: "Flex Message Builder", icon: LayoutTemplate, permission: "templates:view" },
   { href: "/line-settings", label: "LINE OA Settings", icon: PlugZap, permission: "line:view" },
-  { href: "/settings", label: "ตั้งค่าระบบ", icon: Settings, permission: "settings:view" },
+  { href: "/settings", label: "ตั้งค่าโปรเจกต์", icon: Settings, permission: "settings:view" },
 ];

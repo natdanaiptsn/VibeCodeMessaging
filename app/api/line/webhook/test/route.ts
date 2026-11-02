@@ -1,10 +1,10 @@
-import { route } from "@/lib/api/handler";
+import { projectRoute } from "@/lib/api/handler";
 import { getLineCredentials, requireAccessToken } from "@/services/line-account.service";
 import { lineApi, describeLineError } from "@/services/line-messaging.service";
 
 /** ให้ LINE Platform ทดสอบส่ง Webhook มายัง URL ที่ตั้งค่าไว้ */
-export const POST = route({ permission: "line:view", rateLimitPerMinute: 10 }, async () => {
-  const creds = await getLineCredentials();
+export const POST = projectRoute({ permission: "line:view", rateLimitPerMinute: 10 }, async ({ project }) => {
+  const creds = await getLineCredentials(project.id);
   const token = requireAccessToken(creds);
   try {
     const { data } = await lineApi.testWebhookEndpoint(token);

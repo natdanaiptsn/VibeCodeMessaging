@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { CustomerAvatar } from "@/components/common/customer-avatar";
 import { ErrorState, LoadingState } from "@/components/common/states";
 import { useApiMutation, useApiQuery } from "@/hooks/use-api";
-import { useAppContext, useCan } from "@/hooks/use-app-context";
+import { useAppContext, useCan, useProjectPath } from "@/hooks/use-app-context";
 import { formatDateTime, formatNumber } from "@/lib/format";
 
 type CustomerDetail = {
@@ -33,6 +33,7 @@ type CustomerDetail = {
 };
 
 export function CustomerDetailSheet({ customerId, onOpenChange }: { customerId: string | null; onOpenChange: (open: boolean) => void }) {
+  const projectPath = useProjectPath();
   const { timezone } = useAppContext();
   const canEdit = useCan("customers:edit");
   const { data, isLoading, error, refetch } = useApiQuery<CustomerDetail>(["customer", customerId], customerId ? `/api/customers/${customerId}` : null);
@@ -113,7 +114,7 @@ export function CustomerDetailSheet({ customerId, onOpenChange }: { customerId: 
               <NoteEditor key={`${data.id}:${data.note ?? ""}`} customerId={data.id} initial={data.note ?? ""} canEdit={canEdit} />
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/inbox?customer=${data.id}`}><MessagesSquare /> เปิดแชท</Link>
+                  <Link href={projectPath(`/inbox?customer=${data.id}`)}><MessagesSquare /> เปิดแชท</Link>
                 </Button>
                 {canEdit && (
                   <Button variant="outline" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending}>

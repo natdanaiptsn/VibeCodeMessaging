@@ -22,9 +22,9 @@ import type { RuleTrigger, ReplyContentType } from "@/lib/generated/prisma/clien
 
 const RULE_CACHE_TTL_MS = 5_000;
 
-async function fetchActiveRules() {
+async function fetchActiveRules(projectId: string) {
   return prisma.replyRule.findMany({
-    where: { isActive: true },
+    where: { projectId, isActive: true },
     orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
     include: {
       keywords: { select: { keyword: true }, orderBy: { createdAt: "asc" } },
@@ -36,17 +36,21 @@ async function fetchActiveRules() {
 
 type LoadedRule = Awaited<ReturnType<typeof fetchActiveRules>>[number];
 
-const g = globalThis as unknown as { __ruleCache?: { at: number; rules: LoadedRule[] } | null };
+// cache กฎที่เปิดใช้งาน แยกตามโปรเจกต์
+const g = globalThis as unknown as { __ruleCacheByProject?: Map<string, { at: number; rules: LoadedRule[] }> };
+const ruleCache = (g.__ruleCacheByProject ??= new Map());
 
-export function invalidateRuleCache() {
-  g.__ruleCache = null;
+export function invalidateRuleCache(projectId?: string) {
+  if (projectId) ruleCache.delete(projectId);
+  else ruleCache.clear();
 }
 
-async function loadActiveRules(): Promise<LoadedRule[]> {
-  const c = g.__ruleCache;
+async function loadActiveRules(projectId: string): Promise<LoadedRule[]> {
+  const c = ruleCache.get(projectId);
   if (c && Date.now() - c.at < RULE_CACHE_TTL_MS) return c.rules;
-  const rules = await fetchActiveRules();
-  g.__ruleCache = { at: Date.now(), rules };
+  const rules = await fetchActiveRules(projectId);
+  if (ruleCache.size > 200) ruleCache.clear();
+  ruleCache.set(projectId, { at: Date.now(), rules });
   return rules;
 }
 
@@ -89,14 +93,21 @@ function combinedType(messages: LineOutgoingMessage[]): ReplyContentType | null 
 }
 
 export type EngineInput = {
+  projectId: string;
   trigger: RuleTrigger;
   text?: string | null;
   customer: { id: string; displayName: string | null; lineUserId: string } | null;
 };
 
 /** หา rule ที่ตรงกับข้อความ (ไม่สร้างข้อความ) */
-export async function findMatchingRules(trigger: RuleTrigger, text: string | null | undefined, mode: SystemSettings["general"]["multiRuleMode"], limit: number) {
-  const rules = (await loadActiveRules()).filter((r) => r.triggerType === trigger);
+export async function findMatchingRules(
+  projectId: string,
+  trigger: RuleTrigger,
+  text: string | null | undefined,
+  mode: SystemSettings["general"]["multiRuleMode"],
+  limit: number,
+) {
+  const rules = (await loadActiveRules(projectId)).filter((r) => r.triggerType === trigger);
   const matched: { rule: LoadedRule; keyword?: string }[] = [];
   for (const rule of rules) {
     if (KEYWORD_TRIGGERS.has(trigger)) {
@@ -131,7 +142,7 @@ export async function resolveAutoReply(input: EngineInput, settings: SystemSetti
     timezone: settings.general.timezone,
   });
 
-  const matched = await findMatchingRules(input.trigger, input.text, settings.general.multiRuleMode, limit);
+  const matched = await findMatchingRules(input.projectId, input.trigger, input.text, settings.general.multiRuleMode, limit);
   if (matched.length > 0) {
     const messages: LineOutgoingMessage[] = [];
     const used: MatchedRuleInfo[] = [];
@@ -180,10 +191,10 @@ export async function resolveAutoReply(input: EngineInput, settings: SystemSetti
 
   const [textTemplate, flexTemplate] = await Promise.all([
     dr.replyType === "TEXT" && dr.textTemplateId
-      ? prisma.replyTemplate.findUnique({ where: { id: dr.textTemplateId }, select: { content: true } })
+      ? prisma.replyTemplate.findFirst({ where: { id: dr.textTemplateId, projectId: input.projectId }, select: { content: true } })
       : null,
     dr.replyType === "FLEX" && dr.flexTemplateId
-      ? prisma.flexTemplate.findUnique({ where: { id: dr.flexTemplateId }, select: { altText: true, contents: true } })
+      ? prisma.flexTemplate.findFirst({ where: { id: dr.flexTemplateId, projectId: input.projectId }, select: { altText: true, contents: true } })
       : null,
   ]);
   const built = buildReplyMessage({ replyType: dr.replyType, textTemplate, flexTemplate }, values);

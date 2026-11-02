@@ -4,26 +4,34 @@ import { renderTemplate } from "@/lib/templates/variables";
 import { LINE_LIMITS } from "@/lib/line/limits";
 import type { LineOutgoingText } from "@/lib/line/types";
 import type { TextTemplateInput } from "@/lib/validation/templates";
+import { getSettings } from "@/services/settings.service";
 
 export function renderTextMessage(content: string, values: Record<string, string>): LineOutgoingText {
   const text = [...renderTemplate(content, values)].slice(0, LINE_LIMITS.TEXT_MAX_CHARS).join("");
   return { type: "text", text };
 }
 
-export async function listTextTemplates(search?: string) {
+export async function listTextTemplates(projectId: string, search?: string) {
   return prisma.replyTemplate.findMany({
-    where: search
-      ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { content: { contains: search, mode: "insensitive" } }] }
-      : undefined,
+    where: {
+      projectId,
+      ...(search
+        ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { content: { contains: search, mode: "insensitive" } }] }
+        : {}),
+    },
     orderBy: { updatedAt: "desc" },
     take: 500,
     include: { _count: { select: { rules: true } } },
   });
 }
 
-export async function createTextTemplate(input: TextTemplateInput, userId: string) {
+export async function getTextTemplate(projectId: string, id: string) {
+  return prisma.replyTemplate.findFirst({ where: { id, projectId } });
+}
+
+export async function createTextTemplate(projectId: string, input: TextTemplateInput, userId: string) {
   return prisma.replyTemplate.create({
-    data: { name: input.name, description: input.description ?? null, content: input.content, createdById: userId },
+    data: { projectId, name: input.name, description: input.description ?? null, content: input.content, createdById: userId },
   });
 }
 
@@ -34,11 +42,11 @@ export async function updateTextTemplate(id: string, input: TextTemplateInput) {
   });
 }
 
-export async function textTemplateUsage(id: string) {
+export async function textTemplateUsage(projectId: string, id: string) {
   const [rules, settings] = await Promise.all([
     prisma.replyRule.count({ where: { textTemplateId: id } }),
-    prisma.systemSetting.findUnique({ where: { key: "defaultReply" } }),
+    getSettings(projectId),
   ]);
-  const usedAsDefault = (settings?.value as { textTemplateId?: string } | null)?.textTemplateId === id;
+  const usedAsDefault = settings.defaultReply.textTemplateId === id;
   return { rules, usedAsDefault };
 }

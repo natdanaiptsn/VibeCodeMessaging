@@ -28,9 +28,18 @@ export class ApiClientError extends Error {
 
 type FetchOptions = Omit<RequestInit, "body"> & { body?: unknown; formData?: FormData };
 
+const PROJECT_PATH_RE = /^\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\/|$)/i;
+
+/** รหัสโปรเจกต์จาก URL ของหน้าปัจจุบัน (/p/{projectId}/...) — API ใช้เพื่อรู้ว่าทำงานกับโปรเจกต์ใด */
+export function currentProjectId(): string | null {
+  if (typeof window === "undefined") return null;
+  return PROJECT_PATH_RE.exec(window.location.pathname)?.[1] ?? null;
+}
+
 /** เรียก API ภายในระบบ (ส่ง cookie อัตโนมัติ, แปลง error เป็นข้อความภาษาไทย) */
 export async function apiFetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   const { body, formData, headers, ...rest } = opts;
+  const projectId = currentProjectId();
   let res: Response;
   try {
     res = await fetch(url, {
@@ -39,6 +48,7 @@ export async function apiFetch<T>(url: string, opts: FetchOptions = {}): Promise
       headers: {
         Accept: "application/json",
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(projectId ? { "x-project-id": projectId } : {}),
         ...headers,
       },
       body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),

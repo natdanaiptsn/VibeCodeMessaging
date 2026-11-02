@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { route, readJson } from "@/lib/api/handler";
+import { projectRoute, readJson } from "@/lib/api/handler";
 import { validateFlexMessage } from "@/lib/flex/validate";
 import { renderFlexVariables } from "@/lib/flex/render";
 import { sampleTemplateValues } from "@/lib/templates/variables";
@@ -13,12 +13,12 @@ const schema = z.object({
 });
 
 /** ตรวจสอบ Flex Message ในระบบ และ (ถ้าเลือก) ตรวจสอบกับ LINE API โดยไม่ส่งข้อความจริง */
-export const POST = route({ permission: "flex:manage", rateLimitPerMinute: 30 }, async ({ req }) => {
+export const POST = projectRoute({ permission: "flex:manage", rateLimitPerMinute: 30 }, async ({ req, project }) => {
   const input = schema.parse(await readJson(req, 256 * 1024));
   const local = validateFlexMessage(input.altText, input.contents);
   let remote: { checked: boolean; ok: boolean; message?: string; details?: unknown } = { checked: false, ok: false };
   if (input.remote && local.valid) {
-    const creds = await getLineCredentials();
+    const creds = await getLineCredentials(project.id);
     if (!creds.channelAccessToken) {
       remote = { checked: false, ok: false, message: `ยังเชื่อมต่อ LINE ไม่ได้ จึงตรวจสอบกับ LINE ไม่ได้ (${creds.tokenError ?? "ยังไม่ได้ตั้งค่า"})` };
     } else {

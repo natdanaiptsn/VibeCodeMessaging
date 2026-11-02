@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "เข้าสู่ระบบ" }
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const session = await getCurrentSession();
   const { next } = await searchParams;
-  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/inbox";
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/projects";
   if (session) redirect(safeNext);
   return (
     <Providers>

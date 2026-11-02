@@ -13,18 +13,22 @@ import { DEFAULT_SETTINGS } from "../lib/validation/settings";
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
+/** ข้อมูลตัวอย่างทั้งหมดอยู่ในโปรเจกต์หลัก */
+let projectId = "";
+
 async function ensureTextTemplate(name: string, content: string, description?: string) {
-  const found = await prisma.replyTemplate.findFirst({ where: { name } });
+  const found = await prisma.replyTemplate.findFirst({ where: { projectId, name } });
   if (found) return found;
-  return prisma.replyTemplate.create({ data: { name, content, description } });
+  return prisma.replyTemplate.create({ data: { projectId, name, content, description } });
 }
 
 async function ensureFlexTemplate(key: string) {
   const preset = FLEX_PRESETS.find((p) => p.key === key)!;
-  const found = await prisma.flexTemplate.findFirst({ where: { name: preset.name } });
+  const found = await prisma.flexTemplate.findFirst({ where: { projectId, name: preset.name } });
   if (found) return found;
   return prisma.flexTemplate.create({
     data: {
+      projectId,
       name: preset.name,
       description: preset.description,
       altText: preset.altText,
@@ -48,11 +52,12 @@ type RuleSeed = {
 };
 
 async function ensureRule(r: RuleSeed) {
-  const found = await prisma.replyRule.findFirst({ where: { name: r.name } });
+  const found = await prisma.replyRule.findFirst({ where: { projectId, name: r.name } });
   if (found) return found;
   const matchType = r.matchType ?? "CONTAINS";
   return prisma.replyRule.create({
     data: {
+      projectId,
       name: r.name,
       description: r.description,
       priority: r.priority,
@@ -106,10 +111,24 @@ async function seedContent() {
   await ensureRule({ name: "ตอบกลับเมื่อส่งรูป", priority: 0, triggerType: "IMAGE", replyType: "TEXT", textTemplateId: imageThanks.id });
   await ensureRule({ name: "Postback รับคูปอง", priority: 0, triggerType: "POSTBACK", matchType: "CONTAINS", keywords: ["action=coupon"], replyType: "TEXT", textTemplateId: coupon.id });
 
-  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
-    const v = key === "defaultReply" ? { ...value, enabled: true, textTemplateId: fallback.id, cooldownMinutes: 0 } : value;
-    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: v as Prisma.InputJsonValue }, update: {} });
+  // การตั้งค่าของโปรเจกต์ (ทั่วไป + Default Reply) และการตั้งค่า Log ที่ใช้ร่วมกัน
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { settings: true } });
+  if (!project.settings) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        settings: {
+          general: DEFAULT_SETTINGS.general,
+          defaultReply: { ...DEFAULT_SETTINGS.defaultReply, enabled: true, textTemplateId: fallback.id, cooldownMinutes: 0 },
+        } as Prisma.InputJsonValue,
+      },
+    });
   }
+  await prisma.systemSetting.upsert({
+    where: { key: "logging" },
+    create: { key: "logging", value: DEFAULT_SETTINGS.logging as Prisma.InputJsonValue },
+    update: {},
+  });
   await prisma.systemSetting.upsert({
     where: { key: SEED_MARKER_KEY },
     create: { key: SEED_MARKER_KEY, value: { version: 1, seededAt: new Date().toISOString() } },
@@ -118,10 +137,10 @@ async function seedContent() {
   console.log("✓ สร้าง Template, Flex Message, กฎตอบกลับ และการตั้งค่าเริ่มต้น");
 }
 
-async function ensureLineAccount() {
-  const existing = await prisma.lineAccount.findFirst({ where: { isDefault: true } });
+async function ensureDefaultProject() {
+  const existing = await prisma.project.findFirst({ where: { isDefault: true }, orderBy: { createdAt: "asc" } });
   if (existing) return existing;
-  return prisma.lineAccount.create({ data: { name: "LINE OA หลัก", isDefault: true } });
+  return prisma.project.create({ data: { name: "โปรเจกต์แรก", isDefault: true } });
 }
 
 async function seedDemo(accountId: string) {
@@ -130,12 +149,12 @@ async function seedDemo(accountId: string) {
   if (already > 0) return console.log("✓ มีข้อมูลตัวอย่างอยู่แล้ว");
   const names = ["สมชาย ใจดี", "สุดา รักสวย", "John Smith", "มานี มีนา", "ปิติ ยินดี"];
   const texts = ["ราคา", "สนใจสมัครสมาชิกครับ", "ติดต่อเจ้าหน้าที่หน่อย", "สวัสดีค่ะ", "ขอบคุณครับ"];
-  const rule = await prisma.replyRule.findFirst({ where: { name: "สอบถามราคา" } });
+  const rule = await prisma.replyRule.findFirst({ where: { projectId: accountId, name: "สอบถามราคา" } });
   const now = Date.now();
   for (const [i, name] of names.entries()) {
     const customer = await prisma.customer.create({
       data: {
-        lineAccountId: accountId,
+        projectId: accountId,
         lineUserId: `Udemo${String(i).padStart(28, "0")}`,
         displayName: name,
         followedAt: new Date(now - (20 - i) * 86400000),
@@ -147,12 +166,12 @@ async function seedDemo(accountId: string) {
       const ts = new Date(now - d * 86400000 - i * 3600000);
       const text = texts[(d + i) % texts.length]!;
       const msg = await prisma.message.create({
-        data: { lineAccountId: accountId, customerId: customer.id, direction: "INBOUND", type: "TEXT", text, status: "REPLIED", timestamp: ts },
+        data: { projectId: accountId, customerId: customer.id, direction: "INBOUND", type: "TEXT", text, status: "REPLIED", timestamp: ts },
       });
       const ok = (d + i) % 7 !== 0;
       await prisma.replyLog.create({
         data: {
-          lineAccountId: accountId,
+          projectId: accountId,
           customerId: customer.id,
           sourceMessageId: msg.id,
           ruleId: text === "ราคา" ? rule?.id : null,
@@ -179,9 +198,10 @@ async function seedDemo(accountId: string) {
 }
 
 async function main() {
-  const account = await ensureLineAccount();
+  const project = await ensureDefaultProject();
+  projectId = project.id;
   await seedContent();
-  await seedDemo(account.id);
+  await seedDemo(project.id);
 }
 
 main()

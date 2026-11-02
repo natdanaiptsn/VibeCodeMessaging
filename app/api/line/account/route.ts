@@ -1,4 +1,4 @@
-import { route } from "@/lib/api/handler";
+import { projectRoute } from "@/lib/api/handler";
 import { getLineAccountPublic } from "@/services/line-account.service";
 
-export const GET = route({ permission: "line:view" }, async () => getLineAccountPublic());
+export const GET = projectRoute({ permission: "line:view" }, async ({ project }) => getLineAccountPublic(project.id));

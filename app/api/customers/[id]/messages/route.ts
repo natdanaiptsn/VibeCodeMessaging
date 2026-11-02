@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { route, readJson, searchParamsObject } from "@/lib/api/handler";
+import { projectRoute, readJson, searchParamsObject } from "@/lib/api/handler";
 import { prisma } from "@/lib/prisma";
 import { dateStringSchema, emptyToUndefined, idParamsSchema, searchSchema } from "@/lib/validation/common";
 import { sendMessageSchema } from "@/lib/validation/line";
@@ -27,23 +27,23 @@ const querySchema = z.object({
   to: z.preprocess(emptyToUndefined, dateStringSchema),
 });
 
-export const GET = route<{ id: string }>({ permission: "inbox:view" }, async ({ req, params }) => {
+export const GET = projectRoute<{ id: string }>({ permission: "inbox:view" }, async ({ req, params, project }) => {
   const { id } = idParamsSchema.parse(params);
   const q = querySchema.parse(searchParamsObject(req));
-  const exists = await prisma.customer.findUnique({ where: { id }, select: { id: true } });
+  const exists = await prisma.customer.findFirst({ where: { id, projectId: project.id }, select: { id: true } });
   if (!exists) throw notFound("ไม่พบลูกค้า");
-  const { general } = await getSettings();
+  const { general } = await getSettings(project.id);
   const range = dateRange(q.from, q.to, general.timezone);
   return listCustomerMessages(id, { ...q, before: q.before ? new Date(q.before) : undefined, ...range });
 });
 
 /** Admin ส่งข้อความหาลูกค้า (Push Message — นับโควตาข้อความของ LINE OA) */
-export const POST = route<{ id: string }>({ permission: "inbox:send", rateLimitPerMinute: 30 }, async (ctx) => {
+export const POST = projectRoute<{ id: string }>({ permission: "inbox:send", rateLimitPerMinute: 30 }, async (ctx) => {
   const { id } = idParamsSchema.parse(ctx.params);
   const input = sendMessageSchema.parse(await readJson(ctx.req));
-  const customer = await prisma.customer.findUnique({ where: { id } });
+  const customer = await prisma.customer.findFirst({ where: { id, projectId: ctx.project.id } });
   if (!customer) throw notFound("ไม่พบลูกค้า");
-  const [settings, creds] = await Promise.all([getSettings(), getLineCredentials()]);
+  const [settings, creds] = await Promise.all([getSettings(ctx.project.id), getLineCredentials(ctx.project.id)]);
   const token = requireAccessToken(creds);
 
   const values = buildTemplateValues({
@@ -55,11 +55,11 @@ export const POST = route<{ id: string }>({ permission: "inbox:send", rateLimitP
   if (input.type === "text") {
     message = { type: "text", text: stripControlChars(input.text ?? "").slice(0, 5000) };
   } else if (input.type === "textTemplate") {
-    const t = await prisma.replyTemplate.findUnique({ where: { id: input.templateId! } });
+    const t = await prisma.replyTemplate.findFirst({ where: { id: input.templateId!, projectId: ctx.project.id } });
     if (!t) throw notFound("ไม่พบข้อความ Template");
     message = renderTextMessage(t.content, values);
   } else {
-    const f = await prisma.flexTemplate.findUnique({ where: { id: input.templateId! } });
+    const f = await prisma.flexTemplate.findFirst({ where: { id: input.templateId!, projectId: ctx.project.id } });
     if (!f) throw notFound("ไม่พบ Flex Template");
     const r = renderFlexMessage(f, values);
     if (!r.ok) throw badRequest(r.error, r.validation.errors);
