@@ -2,14 +2,25 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { normalizeText } from "@/lib/auto-reply/normalize";
 import { badRequest, notFound } from "@/lib/errors";
-import { KEYWORD_TRIGGERS, type RuleInput } from "@/lib/validation/rules";
+import { KEYWORD_TRIGGERS, summarizeReplyType, type RuleInput } from "@/lib/validation/rules";
 import { invalidateRuleCache } from "@/services/auto-reply-engine.service";
 import type { Prisma, RuleTrigger } from "@/lib/generated/prisma/client";
 
 const ruleInclude = {
   keywords: { select: { id: true, keyword: true }, orderBy: { createdAt: "asc" } },
-  textTemplate: { select: { id: true, name: true, content: true } },
-  flexTemplate: { select: { id: true, name: true, altText: true } },
+  messages: {
+    orderBy: { position: "asc" },
+    select: {
+      id: true,
+      position: true,
+      type: true,
+      text: true,
+      textTemplateId: true,
+      flexTemplateId: true,
+      textTemplate: { select: { id: true, name: true } },
+      flexTemplate: { select: { id: true, name: true } },
+    },
+  },
 } satisfies Prisma.ReplyRuleInclude;
 
 function keywordRows(input: RuleInput) {
@@ -25,14 +36,39 @@ function keywordRows(input: RuleInput) {
   return rows;
 }
 
+/** Template ทุกตัวที่เลือกต้องอยู่ในโปรเจกต์นี้ */
 async function assertTemplates(projectId: string, input: RuleInput) {
-  if (input.replyType === "TEXT") {
-    const t = await prisma.replyTemplate.findFirst({ where: { id: input.textTemplateId!, projectId }, select: { id: true } });
-    if (!t) throw badRequest("ไม่พบข้อความตอบกลับที่เลือก", [{ path: "textTemplateId", message: "ไม่พบข้อความ" }]);
-  } else {
-    const f = await prisma.flexTemplate.findFirst({ where: { id: input.flexTemplateId!, projectId }, select: { id: true } });
-    if (!f) throw badRequest("ไม่พบ Flex Message ที่เลือก", [{ path: "flexTemplateId", message: "ไม่พบ Flex Message" }]);
-  }
+  const textIds = [...new Set(input.messages.flatMap((m) => (m.type === "TEXT" && m.textTemplateId ? [m.textTemplateId] : [])))];
+  const flexIds = [...new Set(input.messages.flatMap((m) => (m.type === "FLEX" ? [m.flexTemplateId] : [])))];
+  const [texts, flexes] = await Promise.all([
+    textIds.length ? prisma.replyTemplate.findMany({ where: { id: { in: textIds }, projectId }, select: { id: true } }) : [],
+    flexIds.length ? prisma.flexTemplate.findMany({ where: { id: { in: flexIds }, projectId }, select: { id: true } }) : [],
+  ]);
+  const found = new Set([...texts, ...flexes].map((t) => t.id));
+  input.messages.forEach((m, i) => {
+    const id = m.type === "TEXT" ? m.textTemplateId : m.flexTemplateId;
+    if (id && !found.has(id)) {
+      const what = m.type === "TEXT" ? "ข้อความ (Text Template)" : "Flex Message";
+      throw badRequest(`ไม่พบ${what}ที่เลือกในข้อความที่ ${i + 1}`, [
+        { path: `messages.${i}.${m.type === "TEXT" ? "textTemplateId" : "flexTemplateId"}`, message: `ไม่พบ${what}` },
+      ]);
+    }
+  });
+}
+
+/** แปลงข้อความจากฟอร์มเป็นแถวในฐานข้อมูล (เรียงตามลำดับที่ส่งมา) */
+function messageRows(input: RuleInput) {
+  return input.messages.map((m, position) =>
+    m.type === "TEXT"
+      ? {
+          position,
+          type: "TEXT" as const,
+          text: m.textTemplateId ? null : (m.text ?? "").replace(/\r\n/g, "\n"),
+          textTemplateId: m.textTemplateId || null,
+          flexTemplateId: null,
+        }
+      : { position, type: "FLEX" as const, text: null, textTemplateId: null, flexTemplateId: m.flexTemplateId },
+  );
 }
 
 function ruleData(input: RuleInput) {
@@ -45,9 +81,7 @@ function ruleData(input: RuleInput) {
     matchType: input.matchType,
     keywordLogic: input.keywordLogic,
     caseSensitive: input.caseSensitive,
-    replyType: input.replyType,
-    textTemplateId: input.replyType === "TEXT" ? input.textTemplateId! : null,
-    flexTemplateId: input.replyType === "FLEX" ? input.flexTemplateId! : null,
+    replyType: summarizeReplyType(input.messages),
   };
 }
 
@@ -90,6 +124,7 @@ export async function createRule(projectId: string, input: RuleInput, userId: st
       createdById: userId,
       updatedById: userId,
       keywords: { create: keywordRows(input) },
+      messages: { create: messageRows(input) },
     },
     include: ruleInclude,
   });
@@ -102,9 +137,15 @@ export async function updateRule(projectId: string, id: string, input: RuleInput
   await assertTemplates(projectId, input);
   const rule = await prisma.$transaction(async (tx) => {
     await tx.replyKeyword.deleteMany({ where: { ruleId: id } });
+    await tx.replyRuleMessage.deleteMany({ where: { ruleId: id } });
     return tx.replyRule.update({
       where: { id },
-      data: { ...ruleData(input), updatedById: userId, keywords: { create: keywordRows(input) } },
+      data: {
+        ...ruleData(input),
+        updatedById: userId,
+        keywords: { create: keywordRows(input) },
+        messages: { create: messageRows(input) },
+      },
       include: ruleInclude,
     });
   });

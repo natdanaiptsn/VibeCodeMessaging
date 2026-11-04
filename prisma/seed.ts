@@ -65,8 +65,13 @@ async function ensureRule(r: RuleSeed) {
       matchType,
       keywordLogic: r.keywordLogic ?? "ANY",
       replyType: r.replyType,
-      textTemplateId: r.textTemplateId ?? null,
-      flexTemplateId: r.flexTemplateId ?? null,
+      messages: {
+        create: [
+          r.replyType === "FLEX"
+            ? { position: 0, type: "FLEX" as const, flexTemplateId: r.flexTemplateId! }
+            : { position: 0, type: "TEXT" as const, textTemplateId: r.textTemplateId! },
+        ],
+      },
       keywords: {
         create: (r.keywords ?? []).map((k) => ({ keyword: k, normalizedKeyword: matchType === "REGEX" ? k : normalizeText(k) })),
       },

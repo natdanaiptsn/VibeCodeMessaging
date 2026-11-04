@@ -56,20 +56,34 @@ async function upsertRule(params: {
     keywordLogic: "ANY" as const,
     caseSensitive: false,
     replyType: params.replyType,
-    textTemplateId: params.textTemplateId,
-    flexTemplateId: params.flexTemplateId,
     updatedById: params.userId,
   };
+  const message =
+    params.replyType === "FLEX"
+      ? { position: 0, type: "FLEX" as const, flexTemplateId: params.flexTemplateId }
+      : { position: 0, type: "TEXT" as const, textTemplateId: params.textTemplateId };
   const existing = await prisma.replyRule.findFirst({ where: { projectId: params.projectId, name: params.name }, select: { id: true } });
   if (existing) {
     await prisma.$transaction([
       prisma.replyKeyword.deleteMany({ where: { ruleId: existing.id } }),
-      prisma.replyRule.update({ where: { id: existing.id }, data: { ...data, keywords: { create: keywords } } }),
+      prisma.replyRuleMessage.deleteMany({ where: { ruleId: existing.id } }),
+      prisma.replyRule.update({
+        where: { id: existing.id },
+        data: { ...data, keywords: { create: keywords }, messages: { create: [message] } },
+      }),
     ]);
     return { created: false, ruleId: existing.id };
   }
   const rule = await prisma.replyRule.create({
-    data: { ...data, projectId: params.projectId, name: params.name, description: params.description, createdById: params.userId, keywords: { create: keywords } },
+    data: {
+      ...data,
+      projectId: params.projectId,
+      name: params.name,
+      description: params.description,
+      createdById: params.userId,
+      keywords: { create: keywords },
+      messages: { create: [message] },
+    },
     select: { id: true },
   });
   return { created: true, ruleId: rule.id };

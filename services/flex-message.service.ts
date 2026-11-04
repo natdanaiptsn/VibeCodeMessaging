@@ -30,7 +30,7 @@ export function containerTypeOf(contents: unknown): string {
 }
 
 export async function listFlexTemplates(projectId: string, search?: string) {
-  return prisma.flexTemplate.findMany({
+  const items = await prisma.flexTemplate.findMany({
     where: { projectId, ...(search ? { name: { contains: search, mode: "insensitive" } } : {}) },
     orderBy: { updatedAt: "desc" },
     take: 500,
@@ -43,9 +43,11 @@ export async function listFlexTemplates(projectId: string, search?: string) {
       contents: true,
       createdAt: true,
       updatedAt: true,
-      _count: { select: { rules: true } },
+      ruleMessages: { select: { ruleId: true } },
     },
   });
+  // จำนวนกฎที่ใช้ Flex นี้ (นับกฎไม่ซ้ำ)
+  return items.map(({ ruleMessages, ...t }) => ({ ...t, _count: { rules: new Set(ruleMessages.map((m) => m.ruleId)).size } }));
 }
 
 export async function getFlexTemplate(projectId: string, id: string) {
@@ -81,7 +83,7 @@ export async function updateFlexTemplate(id: string, input: FlexTemplateInput) {
 
 export async function flexTemplateUsage(projectId: string, id: string) {
   const [rules, settings] = await Promise.all([
-    prisma.replyRule.count({ where: { flexTemplateId: id } }),
+    prisma.replyRule.count({ where: { messages: { some: { flexTemplateId: id } } } }),
     getSettings(projectId),
   ]);
   const usedAsDefault = settings.defaultReply.flexTemplateId === id;

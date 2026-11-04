@@ -97,6 +97,12 @@ enum ReplyContentType {
   MIXED
 }
 
+/// ชนิดของข้อความตอบกลับแต่ละข้อความในกฎ
+enum ReplyMessageType {
+  TEXT
+  FLEX
+}
+
 enum ReplyStatus {
   PENDING
   PROCESSING
@@ -352,9 +358,9 @@ model ReplyTemplate {
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?       @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  rules     ReplyRule[]
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  ruleMessages ReplyRuleMessage[]
 
   @@index([projectId, name])
   @@index([projectId, updatedAt])
@@ -372,44 +378,63 @@ model FlexTemplate {
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
-  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy User?       @relation("FlexCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  rules     ReplyRule[]
+  project      Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy    User?              @relation("FlexCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  ruleMessages ReplyRuleMessage[]
 
   @@index([projectId, name])
   @@index([projectId, updatedAt])
 }
 
 model ReplyRule {
+  id            String           @id @default(uuid()) @db.Uuid
+  projectId     String           @db.Uuid
+  name          String
+  description   String?
+  isActive      Boolean          @default(true)
+  priority      Int              @default(0) // ค่ามาก = สำคัญกว่า
+  triggerType   RuleTrigger      @default(TEXT)
+  matchType     MatchType        @default(CONTAINS)
+  keywordLogic  KeywordLogic     @default(ANY)
+  caseSensitive Boolean          @default(false)
+  /// สรุปชนิดของข้อความตอบกลับทั้งหมด (TEXT / FLEX / MIXED) — ข้อความจริงอยู่ใน ReplyRuleMessage
+  replyType     ReplyContentType
+  matchCount    Int              @default(0)
+  lastMatchedAt DateTime?        @db.Timestamptz(3)
+  createdById   String?          @db.Uuid
+  updatedById   String?          @db.Uuid
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(3)
+
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?              @relation("RuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?              @relation("RuleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  keywords  ReplyKeyword[]
+  messages  ReplyRuleMessage[]
+  replyLogs ReplyLog[]
+
+  @@index([projectId, isActive, triggerType, priority(sort: Desc)])
+}
+
+/// ข้อความตอบกลับของกฎ (เรียงตาม position — LINE ส่งได้สูงสุด 5 ข้อความต่อการตอบกลับ 1 ครั้ง)
+/// - TEXT: พิมพ์ข้อความเอง (text) หรือใช้ Text Template (textTemplateId)
+/// - FLEX: ใช้ Flex Template (flexTemplateId)
+model ReplyRuleMessage {
   id             String           @id @default(uuid()) @db.Uuid
-  projectId      String           @db.Uuid
-  name           String
-  description    String?
-  isActive       Boolean          @default(true)
-  priority       Int              @default(0) // ค่ามาก = สำคัญกว่า
-  triggerType    RuleTrigger      @default(TEXT)
-  matchType      MatchType        @default(CONTAINS)
-  keywordLogic   KeywordLogic     @default(ANY)
-  caseSensitive  Boolean          @default(false)
-  replyType      ReplyContentType
+  ruleId         String           @db.Uuid
+  position       Int
+  type           ReplyMessageType
+  text           String?
   textTemplateId String?          @db.Uuid
   flexTemplateId String?          @db.Uuid
-  matchCount     Int              @default(0)
-  lastMatchedAt  DateTime?        @db.Timestamptz(3)
-  createdById    String?          @db.Uuid
-  updatedById    String?          @db.Uuid
   createdAt      DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
 
-  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rule         ReplyRule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   textTemplate ReplyTemplate? @relation(fields: [textTemplateId], references: [id], onDelete: Restrict)
   flexTemplate FlexTemplate?  @relation(fields: [flexTemplateId], references: [id], onDelete: Restrict)
-  createdBy    User?          @relation("RuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy    User?          @relation("RuleUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  keywords     ReplyKeyword[]
-  replyLogs    ReplyLog[]
 
-  @@index([projectId, isActive, triggerType, priority(sort: Desc)])
+  @@unique([ruleId, position])
   @@index([textTemplateId])
   @@index([flexTemplateId])
 }
