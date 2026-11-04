@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
-import { requirePageUser } from "@/lib/auth/current-user";
+import { requireProjectPage } from "@/lib/auth/current-user";
 import { FlexBuilder } from "@/components/flex-builder/flex-builder";
 import { FLEX_PRESETS } from "@/lib/flex/presets";
 
 export const metadata: Metadata = { title: "สร้าง Flex Message" };
 
-export default async function NewFlexPage({ searchParams }: { searchParams: Promise<{ preset?: string }> }) {
-  await requirePageUser("flex:manage");
+export default async function NewFlexPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams: Promise<{ preset?: string }>;
+}) {
+  await requireProjectPage(params, "flex:manage");
   const { preset } = await searchParams;
   const p = FLEX_PRESETS.find((x) => x.key === preset);
   return (

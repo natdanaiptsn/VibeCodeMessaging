@@ -1,9 +1,14 @@
+"use client";
+
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** รูป LINE OA ของโปรเจกต์ (ถ้ายังไม่เชื่อมต่อ ใช้ตัวอักษรแรกของชื่อ) */
+/** รูปโปรไฟล์ (LINE OA / ผู้ใช้) — ถ้าไม่มีหรือโหลดไม่ได้ ใช้ตัวอักษรแรกของชื่อ */
 export function ProjectAvatar({ name, pictureUrl, className }: { name: string; pictureUrl?: string | null; className?: string }) {
+  const [failed, setFailed] = useState<string | null>(null);
   // ข้ามสระหน้าของภาษาไทย (เ แ โ ใ ไ) เพื่อให้ได้พยัญชนะตัวแรก เช่น “โปรเจกต์” → “ป”
-  const initial = [...name.trim()].find((ch) => !/[\u0e40-\u0e44\s]/.test(ch))?.toUpperCase() ?? "P";
+  const initial = [...name.trim()].find((ch) => !/[เ-ไ\s]/.test(ch))?.toUpperCase() ?? "P";
+  const showImage = pictureUrl && failed !== pictureUrl;
   return (
     <span
       className={cn(
@@ -11,8 +16,8 @@ export function ProjectAvatar({ name, pictureUrl, className }: { name: string; p
         className,
       )}
     >
-      {pictureUrl ? (
-        <img src={pictureUrl} alt="" className="size-full object-cover" referrerPolicy="no-referrer" />
+      {showImage ? (
+        <img src={pictureUrl} alt="" className="size-full object-cover" referrerPolicy="no-referrer" onError={() => setFailed(pictureUrl)} />
       ) : (
         initial
       )}

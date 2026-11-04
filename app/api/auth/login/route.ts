@@ -15,6 +15,7 @@ import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { ApiError, tooManyRequests, unauthorized } from "@/lib/errors";
 import { writeAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
+import { claimOrphanProjects } from "@/services/project.service";
 import type { User } from "@/lib/generated/prisma/client";
 
 const MAX_FAILED = 5;
@@ -72,6 +73,8 @@ export const POST = publicRoute({ rateLimitPerMinute: 30 }, async ({ req, ip, us
       throw unauthorized(INVALID);
     }
     user = await syncEnvAdmin(envAdmin, existing);
+    // โปรเจกต์ที่ยังไม่มีเจ้าของ (เช่น ฐานข้อมูลใหม่) เป็นของผู้ดูแลหลัก
+    await claimOrphanProjects(user.id);
   } else {
     user = await prisma.user.findUnique({
       where: identifier.includes("@") ? { email: identifier } : { username: identifier },

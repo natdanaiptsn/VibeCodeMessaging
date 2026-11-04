@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { requirePageUser } from "@/lib/auth/current-user";
+import { requireProjectPage } from "@/lib/auth/current-user";
 import { TextMessagesView } from "@/components/text-messages/text-messages-view";
 
 export const metadata: Metadata = { title: "Text Message" };
 
-export default async function TextMessagesPage() {
-  await requirePageUser("templates:view");
+export default async function TextMessagesPage({ params }: { params: Promise<{ projectId: string }> }) {
+  await requireProjectPage(params, "templates:view");
   return <TextMessagesView />;
 }

@@ -3,12 +3,13 @@ import { projectCreateSchema } from "@/lib/validation/projects";
 import { createProject, listProjects } from "@/services/project.service";
 import { auditFromCtx } from "@/lib/audit";
 
-/** รายการโปรเจกต์ทั้งหมด (ผู้ใช้ทุกคนเห็นทุกโปรเจกต์) */
-export const GET = route({}, async () => listProjects());
+/** โปรเจกต์ที่ผู้ใช้เป็นสมาชิก (ของฉัน + ที่มีคนเชิญ) */
+export const GET = route({}, async ({ session }) => listProjects(session.user.id));
 
-export const POST = route({ permission: "projects:manage", rateLimitPerMinute: 20 }, async (ctx) => {
+/** ทุกบัญชีสร้างโปรเจกต์ของตัวเองได้ — ผู้สร้างเป็นเจ้าของ */
+export const POST = route({ permission: "projects:create", rateLimitPerMinute: 20 }, async (ctx) => {
   const input = projectCreateSchema.parse(await readJson(ctx.req, 4096));
-  const project = await createProject(input);
+  const project = await createProject(ctx.session.user.id, input);
   await auditFromCtx(ctx)({
     projectId: project.id,
     action: "project.create",

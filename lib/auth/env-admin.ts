@@ -90,9 +90,13 @@ const verifiedHashes = new Map<string, boolean>();
  * ตรวจว่ารหัสผ่านใน Environment ยังตรงกับ hash ที่บันทึกไว้หรือไม่ (cache ผลต่อ instance)
  * ถ้าไม่ตรง แปลว่า ADMIN_PASSWORD ถูกเปลี่ยน → ยกเลิก session เดิมทั้งหมดทันที
  */
-export async function envAdminSessionStillValid(userId: string, passwordHash: string): Promise<boolean> {
+export async function envAdminSessionStillValid(userId: string, passwordHash: string | null): Promise<boolean> {
   const cfg = envAdminConfig();
   if (!cfg) return true;
+  if (!passwordHash) {
+    await prisma.session.deleteMany({ where: { userId } });
+    return false;
+  }
   const key = `${userId}:${passwordHash}`;
   let ok = verifiedHashes.get(key);
   if (ok === undefined) {

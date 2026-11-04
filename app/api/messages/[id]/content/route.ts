@@ -5,14 +5,19 @@ import { ApiError, badRequest, notFound } from "@/lib/errors";
 import { getLineCredentials, requireAccessToken } from "@/services/line-account.service";
 import { lineApi } from "@/services/line-messaging.service";
 import { isServerless } from "@/lib/runtime";
+import { can } from "@/lib/auth/permissions";
+import { getMembership } from "@/services/project.service";
 
 const INLINE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 /** ดึงไฟล์ที่ลูกค้าส่งมา (รูปภาพ/วิดีโอ/เสียง/ไฟล์) ผ่าน LINE Content API — ต้องเข้าสู่ระบบ */
-export const GET = route<{ id: string }>({ permission: "inbox:view", rateLimitPerMinute: 120 }, async ({ params }) => {
+export const GET = route<{ id: string }>({ rateLimitPerMinute: 120 }, async ({ params, session }) => {
   const { id } = idParamsSchema.parse(params);
   const message = await prisma.message.findUnique({ where: { id } });
   if (!message || message.direction !== "INBOUND" || !message.lineMessageId) throw notFound("ไม่พบไฟล์");
+  // ต้องเป็นสมาชิกของโปรเจกต์ที่ข้อความนี้อยู่
+  const membership = await getMembership(message.projectId, session.user.id);
+  if (!membership || !can(membership.role, "inbox:view")) throw notFound("ไม่พบไฟล์");
   if (!["IMAGE", "VIDEO", "AUDIO", "FILE"].includes(message.type)) throw badRequest("ข้อความนี้ไม่มีไฟล์แนบ");
   const provider = (message.payload as { contentProvider?: { type?: string; originalContentUrl?: string } } | null)?.contentProvider;
   if (provider?.type === "external") throw badRequest("ไฟล์นี้อยู่บนเซิร์ฟเวอร์ภายนอก");

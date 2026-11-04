@@ -1,24 +1,43 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
-import { notFound } from "@/lib/errors";
+import { badRequest, conflict, forbidden, notFound } from "@/lib/errors";
 import { DEFAULT_SETTINGS } from "@/lib/validation/settings";
 import { invalidateRuleCache } from "@/services/auto-reply-engine.service";
 import { invalidateSettingsCache } from "@/services/settings.service";
 import type { ProjectCreateInput, ProjectUpdateInput } from "@/lib/validation/projects";
+import type { UserRole } from "@/lib/generated/prisma/client";
 
 /**
  * โปรเจกต์ — แต่ละโปรเจกต์เชื่อมต่อ LINE OA ได้ 1 บัญชี และมีลูกค้า/ข้อความ/กฎ/Template/การตั้งค่าแยกกัน
+ * ผู้ใช้เห็นเฉพาะโปรเจกต์ที่ตัวเองเป็นสมาชิก (ProjectMember) — ผู้สร้างเป็น OWNER ของโปรเจกต์
  */
+
+export async function getMembership(projectId: string, userId: string) {
+  return prisma.projectMember.findUnique({ where: { projectId_userId: { projectId, userId } }, select: { role: true } });
+}
+
+/** โปรเจกต์ที่ยังไม่มีสมาชิก (เช่น โปรเจกต์แรกของฐานข้อมูลใหม่) ให้ผู้ดูแลหลักเป็นเจ้าของ */
+export async function claimOrphanProjects(userId: string) {
+  const orphans = await prisma.project.findMany({ where: { members: { none: {} } }, select: { id: true } });
+  if (orphans.length === 0) return;
+  await prisma.projectMember.createMany({
+    data: orphans.map((p) => ({ projectId: p.id, userId, role: "OWNER" as const })),
+    skipDuplicates: true,
+  });
+}
 
 export type ProjectSummary = Awaited<ReturnType<typeof listProjects>>[number];
 
-/** รายการโปรเจกต์พร้อมสถิติย่อ (ไม่มี Token/Secret) */
-export async function listProjects() {
+/** รายการโปรเจกต์ของผู้ใช้ พร้อมสถิติย่อ (ไม่มี Token/Secret) */
+export async function listProjects(userId: string) {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const [projects, customers, rules, messages] = await Promise.all([
+  const memberships = await prisma.projectMember.findMany({ where: { userId }, select: { projectId: true, role: true } });
+  const ids = memberships.map((m) => m.projectId);
+  const [projects, customers, rules, messages, memberCounts] = await Promise.all([
     prisma.project.findMany({
-      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      where: { id: { in: ids } },
+      orderBy: [{ createdAt: "asc" }],
       select: {
         id: true,
         name: true,
@@ -35,14 +54,22 @@ export async function listProjects() {
         createdAt: true,
       },
     }),
-    prisma.customer.groupBy({ by: ["projectId"], _count: { _all: true } }),
-    prisma.replyRule.groupBy({ by: ["projectId"], where: { isActive: true }, _count: { _all: true } }),
-    prisma.message.groupBy({ by: ["projectId"], where: { direction: "INBOUND", timestamp: { gte: since } }, _count: { _all: true } }),
+    prisma.customer.groupBy({ by: ["projectId"], where: { projectId: { in: ids } }, _count: { _all: true } }),
+    prisma.replyRule.groupBy({ by: ["projectId"], where: { projectId: { in: ids }, isActive: true }, _count: { _all: true } }),
+    prisma.message.groupBy({
+      by: ["projectId"],
+      where: { projectId: { in: ids }, direction: "INBOUND", timestamp: { gte: since } },
+      _count: { _all: true },
+    }),
+    prisma.projectMember.groupBy({ by: ["projectId"], where: { projectId: { in: ids } }, _count: { _all: true } }),
   ]);
   const count = (rows: { projectId: string; _count: { _all: number } }[], id: string) => rows.find((r) => r.projectId === id)?._count._all ?? 0;
   const envSecret = Boolean(env().LINE_CHANNEL_SECRET?.trim());
   return projects.map(({ channelSecretEnc, settings, ...p }) => ({
     ...p,
+    /** บทบาทของผู้ใช้ในโปรเจกต์นี้ (OWNER = โปรเจกต์ของฉัน) */
+    role: memberships.find((m) => m.projectId === p.id)!.role,
+    members: count(memberCounts, p.id),
     /** กรอก Channel secret แล้วหรือยัง (ไม่ส่งค่าจริงออกไป) */
     hasCredentials: Boolean(channelSecretEnc) || (p.isDefault && envSecret),
     autoReplyEnabled:
@@ -64,10 +91,15 @@ export async function getProjectBasic(id: string) {
   });
 }
 
-export async function createProject(input: ProjectCreateInput) {
+export async function createProject(userId: string, input: ProjectCreateInput) {
   const hasDefault = await prisma.project.count({ where: { isDefault: true } });
   return prisma.project.create({
-    data: { name: input.name, description: input.description || null, isDefault: hasDefault === 0 },
+    data: {
+      name: input.name,
+      description: input.description || null,
+      isDefault: hasDefault === 0,
+      members: { create: { userId, role: "OWNER" } },
+    },
     select: { id: true, name: true },
   });
 }
@@ -107,4 +139,83 @@ export async function deleteProject(id: string) {
   invalidateRuleCache(id);
   invalidateSettingsCache(id);
   return project;
+}
+
+// ───────────────────────── สมาชิกโปรเจกต์ ─────────────────────────
+
+export async function listMembers(projectId: string) {
+  const members = await prisma.projectMember.findMany({
+    where: { projectId },
+    orderBy: [{ createdAt: "asc" }],
+    select: {
+      role: true,
+      createdAt: true,
+      user: {
+        select: { id: true, name: true, username: true, email: true, avatarUrl: true, isActive: true, identities: { select: { provider: true } } },
+      },
+    },
+  });
+  return members.map((m) => ({
+    userId: m.user.id,
+    name: m.user.name,
+    username: m.user.username,
+    email: m.user.email,
+    avatarUrl: m.user.avatarUrl,
+    isActive: m.user.isActive,
+    providers: m.user.identities.map((i) => i.provider),
+    role: m.role,
+    addedAt: m.createdAt,
+  }));
+}
+
+/** ADMIN เพิ่มได้เฉพาะ ADMIN/AGENT — การให้หรือถอดสิทธิ์ OWNER ต้องเป็น OWNER */
+function assertCanAssign(actorRole: UserRole, role: UserRole) {
+  if (role === "OWNER" && actorRole !== "OWNER") throw forbidden("เฉพาะเจ้าของโปรเจกต์เท่านั้นที่ให้สิทธิ์เจ้าของได้");
+}
+
+async function ownerCount(projectId: string) {
+  return prisma.projectMember.count({ where: { projectId, role: "OWNER" } });
+}
+
+/** เพิ่มสมาชิกด้วยอีเมลหรือชื่อผู้ใช้ของบัญชีที่มีในระบบแล้ว */
+export async function addMember(projectId: string, identifier: string, role: UserRole, actorRole: UserRole) {
+  assertCanAssign(actorRole, role);
+  const id = identifier.trim().toLowerCase();
+  const user = await prisma.user.findFirst({
+    where: id.includes("@") ? { email: id } : { username: id },
+    select: { id: true, name: true, isActive: true },
+  });
+  if (!user || !user.isActive) {
+    throw notFound("ไม่พบบัญชีนี้ในระบบ — ให้ผู้ใช้เข้าสู่ระบบด้วย Google หรือ LINE หนึ่งครั้งก่อน แล้วเพิ่มด้วยอีเมลของบัญชีนั้น");
+  }
+  const existing = await getMembership(projectId, user.id);
+  if (existing) throw conflict(`${user.name} เป็นสมาชิกของโปรเจกต์นี้อยู่แล้ว`);
+  await prisma.projectMember.create({ data: { projectId, userId: user.id, role } });
+  return user;
+}
+
+export async function updateMemberRole(projectId: string, userId: string, role: UserRole, actorRole: UserRole) {
+  const current = await getMembership(projectId, userId);
+  if (!current) throw notFound("ไม่พบสมาชิก");
+  assertCanAssign(actorRole, role);
+  if (current.role === "OWNER") {
+    assertCanAssign(actorRole, "OWNER");
+    if (role !== "OWNER" && (await ownerCount(projectId)) <= 1) throw badRequest("โปรเจกต์ต้องมีเจ้าของอย่างน้อย 1 คน");
+  }
+  await prisma.projectMember.update({ where: { projectId_userId: { projectId, userId } }, data: { role } });
+}
+
+/** นำสมาชิกออก (หรือออกจากโปรเจกต์เอง) — เจ้าของคนสุดท้ายออกไม่ได้ */
+export async function removeMember(projectId: string, userId: string, actor: { userId: string; role: UserRole }) {
+  const current = await getMembership(projectId, userId);
+  if (!current) throw notFound("ไม่พบสมาชิก");
+  const self = actor.userId === userId;
+  if (!self) {
+    if (actor.role === "AGENT") throw forbidden();
+    if (current.role === "OWNER") assertCanAssign(actor.role, "OWNER");
+  }
+  if (current.role === "OWNER" && (await ownerCount(projectId)) <= 1) {
+    throw badRequest("เจ้าของคนสุดท้ายออกจากโปรเจกต์ไม่ได้ — ให้สิทธิ์เจ้าของกับสมาชิกอื่นก่อน หรือลบโปรเจกต์");
+  }
+  await prisma.projectMember.delete({ where: { projectId_userId: { projectId, userId } } });
 }

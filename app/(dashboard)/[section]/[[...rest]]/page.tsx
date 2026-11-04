@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
-import { getDefaultProject } from "@/services/line-account.service";
+import { prisma } from "@/lib/prisma";
+import { requirePageUser } from "@/lib/auth/current-user";
 
-/** ลิงก์เดิมก่อนมีระบบโปรเจกต์ (เช่น /inbox, /auto-reply) — พาไปหน้าเดียวกันของโปรเจกต์หลัก */
+/** ลิงก์เดิมก่อนมีระบบโปรเจกต์ (เช่น /inbox, /auto-reply) — พาไปหน้าเดียวกันของโปรเจกต์หลัก (ถ้าเป็นสมาชิก) */
 const LEGACY_SECTIONS = new Set(["inbox", "customers", "auto-reply", "text-messages", "flex-builder", "line-settings"]);
 
 export default async function LegacyRedirect({
@@ -13,7 +14,12 @@ export default async function LegacyRedirect({
 }) {
   const { section, rest } = await params;
   if (!LEGACY_SECTIONS.has(section)) notFound();
-  const project = await getDefaultProject();
+  const user = await requirePageUser();
+  const project = await prisma.project.findFirst({
+    where: { isDefault: true, members: { some: { userId: user.id } } },
+    select: { id: true },
+  });
+  if (!project) redirect("/projects");
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(await searchParams)) {
     if (typeof v === "string") qs.set(k, v);

@@ -20,7 +20,7 @@ import { TestChatWidget } from "@/components/test-chat/test-chat-widget";
 import { ProjectAvatar } from "@/components/projects/project-avatar";
 import { AppContextProvider, useAppContext, type AppProject, type AppUser } from "@/hooks/use-app-context";
 import { apiFetch, useApiQuery } from "@/hooks/use-api";
-import { can, ROLE_LABELS } from "@/lib/auth/permissions";
+import { can, ROLE_LABELS, SYSTEM_ROLE_LABELS } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -45,7 +45,7 @@ function ProjectSwitcher({ project, onNavigate }: { project: AppProject; onNavig
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const canCreate = can(useAppContext().user.role, "projects:manage");
+  const canCreate = can(useAppContext().user.role, "projects:create");
   const projects = useApiQuery<ProjectListItem[]>(["projects"], open ? "/api/projects" : null);
   // เปลี่ยนโปรเจกต์แล้วอยู่หน้าเมนูเดิม (เช่น กำลังดูกฎ → ไปหน้ากฎของอีกโปรเจกต์)
   const section = pathname.split("/")[3] ?? "inbox";
@@ -94,11 +94,11 @@ function ProjectSwitcher({ project, onNavigate }: { project: AppProject; onNavig
   );
 }
 
-function NavList({ user, project, onNavigate }: { user: AppUser; project: AppProject; onNavigate?: () => void }) {
+function NavList({ project, onNavigate }: { project: AppProject; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-col gap-0.5">
-      {NAV_ITEMS.filter((item) => can(user.role, item.permission)).map((item) => {
+      {NAV_ITEMS.filter((item) => can(project.role, item.permission)).map((item) => {
         const href = `/p/${project.id}${item.href}`;
         const active = pathname === href || pathname.startsWith(`${href}/`);
         const Icon = item.icon;
@@ -122,7 +122,7 @@ function NavList({ user, project, onNavigate }: { user: AppUser; project: AppPro
 }
 
 /** เมนูผู้ใช้ (บัญชี, ตั้งค่าที่ใช้ร่วมกันทุกโปรเจกต์, ออกจากระบบ) */
-export function UserMenu({ user, compact }: { user: AppUser; compact?: boolean }) {
+export function UserMenu({ user, compact, roleLabel }: { user: AppUser; compact?: boolean; roleLabel?: string }) {
   const router = useRouter();
   const logout = async () => {
     try {
@@ -146,7 +146,7 @@ export function UserMenu({ user, compact }: { user: AppUser; compact?: boolean }
             <UserCircle2 className="size-8 text-gray-400 dark:text-gray-500" />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">{user.name}</span>
-              <span className="block truncate text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</span>
+              <span className="block truncate text-xs text-muted-foreground">{roleLabel ?? SYSTEM_ROLE_LABELS[user.role]}</span>
             </span>
           </button>
         )}
@@ -178,11 +178,11 @@ function SidebarContent({ user, project, onNavigate }: { user: AppUser; project:
       <Brand />
       <ProjectSwitcher project={project} onNavigate={onNavigate} />
       <div className="thin-scrollbar flex-1 overflow-y-auto">
-        <NavList user={user} project={project} onNavigate={onNavigate} />
+        <NavList project={project} onNavigate={onNavigate} />
       </div>
       <div className="flex flex-col gap-2">
         <ThemeToggle />
-        <UserMenu user={user} />
+        <UserMenu user={user} roleLabel={`${ROLE_LABELS[project.role]}โปรเจกต์`} />
       </div>
     </div>
   );
@@ -203,7 +203,7 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   // เว้นที่ด้านล่างให้ปุ่มแชททดสอบ (ยกเว้นหน้ากล่องข้อความที่ใช้ความสูงเต็มจอ)
-  const roomForChatButton = can(user.role, "rules:view") && !pathname.startsWith(`/p/${project.id}/inbox`);
+  const roomForChatButton = can(project.role, "rules:view") && !pathname.startsWith(`/p/${project.id}/inbox`);
   return (
     <AppContextProvider value={{ user, timezone, project }}>
       <div className="min-h-dvh">

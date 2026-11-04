@@ -19,6 +19,8 @@ export type AppProject = {
   isDefault: boolean;
   displayName: string | null;
   pictureUrl: string | null;
+  /** บทบาทของผู้ใช้ในโปรเจกต์นี้ */
+  role: Role;
 };
 
 export type AppContextValue = { user: AppUser; timezone: string; project: AppProject | null };
@@ -33,8 +35,14 @@ export function useAppContext(): AppContextValue {
   return ctx;
 }
 
+/** บทบาทที่ใช้ตรวจสิทธิ์: ภายในโปรเจกต์ใช้บทบาทในโปรเจกต์ นอกโปรเจกต์ใช้บทบาทของบัญชี */
+export function useRole(): Role {
+  const { user, project } = useAppContext();
+  return project?.role ?? user.role;
+}
+
 export function useCan(permission: Permission): boolean {
-  return can(useAppContext().user.role, permission);
+  return can(useRole(), permission);
 }
 
 /** โปรเจกต์ปัจจุบัน (ใช้ได้เฉพาะหน้าภายใน /p/{projectId}/...) */

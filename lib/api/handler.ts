@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { ApiError, badRequest, forbidden, notFound, tooManyRequests, unauthorized } from "@/lib/errors";
 import { prisma } from "@/lib/prisma";
 import { getSession, type AuthSession } from "@/lib/auth/session";
-import { can, type Permission } from "@/lib/auth/permissions";
+import { can, type Permission, type Role } from "@/lib/auth/permissions";
 import { getClientIp, getUserAgent, isSameOrigin } from "@/lib/request";
 import { rateLimit } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
@@ -30,8 +30,8 @@ export type RouteContext<P> = {
 
 type PublicRouteContext<P> = Omit<RouteContext<P>, "session"> & { session: AuthSession | null };
 
-/** โปรเจกต์ที่กำลังทำงานอยู่ (ไม่มีข้อมูลลับ) */
-export type ProjectRef = { id: string; name: string; isDefault: boolean };
+/** โปรเจกต์ที่กำลังทำงานอยู่ (ไม่มีข้อมูลลับ) + บทบาทของผู้ใช้ในโปรเจกต์นี้ */
+export type ProjectRef = { id: string; name: string; isDefault: boolean; role: Role };
 
 export type ProjectRouteContext<P> = RouteContext<P> & { project: ProjectRef };
 
@@ -40,13 +40,17 @@ export const PROJECT_HEADER = "x-project-id";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function resolveProject(req: NextRequest): Promise<ProjectRef> {
+async function resolveProject(req: NextRequest, userId: string): Promise<ProjectRef> {
   const id = req.headers.get(PROJECT_HEADER) ?? req.nextUrl.searchParams.get("projectId");
   if (!id) throw badRequest("ไม่ได้ระบุโปรเจกต์");
   if (!UUID_RE.test(id)) throw badRequest("รหัสโปรเจกต์ไม่ถูกต้อง");
-  const project = await prisma.project.findUnique({ where: { id }, select: { id: true, name: true, isDefault: true } });
-  if (!project) throw notFound("ไม่พบโปรเจกต์ (อาจถูกลบไปแล้ว)");
-  return project;
+  // ต้องเป็นสมาชิกของโปรเจกต์ — ถ้าไม่ใช่ ตอบเหมือนไม่มีโปรเจกต์นี้ (ไม่เปิดเผยว่ามีอยู่)
+  const membership = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId: id, userId } },
+    select: { role: true, project: { select: { id: true, name: true, isDefault: true } } },
+  });
+  if (!membership) throw notFound("ไม่พบโปรเจกต์ (อาจถูกลบ หรือคุณไม่ได้เป็นสมาชิก)");
+  return { ...membership.project, role: membership.role };
 }
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -134,14 +138,20 @@ export function route<P = Record<string, never>>(
 }
 
 /**
- * Route Handler ที่ทำงานภายในโปรเจกต์ — ต้องเข้าสู่ระบบ และระบุโปรเจกต์ผ่าน Header "x-project-id"
+ * Route Handler ที่ทำงานภายในโปรเจกต์ — ต้องเข้าสู่ระบบ, เป็นสมาชิกของโปรเจกต์ และระบุโปรเจกต์ผ่าน Header "x-project-id"
  * (หรือ query ?projectId= สำหรับลิงก์รูป/ไฟล์) ข้อมูลทุกอย่างใน handler ต้องกรองด้วย ctx.project.id
+ * สิทธิ์ (opts.permission) ตรวจจากบทบาทของผู้ใช้ในโปรเจกต์นี้ ไม่ใช่บทบาทระดับระบบ
  */
 export function projectRoute<P = Record<string, never>>(
   opts: RouteOptions,
   handler: (ctx: ProjectRouteContext<P>) => Promise<Response | unknown>,
 ) {
-  return route<P>(opts, async (ctx) => handler({ ...ctx, project: await resolveProject(ctx.req) }));
+  const { permission, ...rest } = opts;
+  return route<P>(rest, async (ctx) => {
+    const project = await resolveProject(ctx.req, ctx.session.user.id);
+    if (permission && !can(project.role, permission)) throw forbidden();
+    return handler({ ...ctx, project });
+  });
 }
 
 /** Route Handler สาธารณะ (ไม่บังคับเข้าสู่ระบบ) */

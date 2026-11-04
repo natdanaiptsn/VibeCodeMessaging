@@ -29,7 +29,7 @@ function ttlMs() {
   return env().SESSION_TTL_HOURS * 60 * 60 * 1000;
 }
 
-function cookieSecure(): boolean {
+export function cookieSecure(): boolean {
   const mode = env().COOKIE_SECURE;
   if (mode === "true") return true;
   if (mode === "false") return false;
