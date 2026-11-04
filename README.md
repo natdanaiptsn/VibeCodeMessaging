@@ -254,6 +254,7 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | | (ไม่บังคับ) เปิดปุ่ม “เข้าสู่ระบบด้วย Google” — สร้างที่ Google Cloud Console |
 | `LINE_LOGIN_CHANNEL_ID` / `LINE_LOGIN_CHANNEL_SECRET` | | (ไม่บังคับ) เปิดปุ่ม “เข้าสู่ระบบด้วย LINE” — ใช้ช่อง **LINE Login** (คนละช่องกับ Messaging API) |
 | `AUTH_ALLOW_SIGNUP` | | `true` (ค่าเริ่มต้น) = ใครก็สมัครด้วย Google/LINE ได้, `false` = เฉพาะบัญชีที่มีในระบบหรือผูกไว้แล้ว |
+| `PRIVACY_CONTACT_EMAIL` | | (ไม่บังคับ) อีเมลติดต่อที่แสดงในหน้า `/privacy` (หน้านโยบายความเป็นส่วนตัวที่ Google ต้องใช้ตอน Publish app) |
 | `COOKIE_SECURE` | | `auto` / `true` / `false` |
 | `TRUST_PROXY` | | `true` เมื่ออยู่หลัง Reverse Proxy (อ่าน IP จาก X-Forwarded-For) |
 | `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` | | (ไม่บังคับ) ใช้กับ **โปรเจกต์หลัก** เท่านั้น ถ้ากำหนด จะใช้แทนค่าที่กรอกในหน้าเว็บ — โปรเจกต์อื่นกรอกในหน้า LINE OA Settings ของโปรเจกต์นั้น |
@@ -314,7 +315,12 @@ npm run admin:create -- --username somchai --name "สมชาย" --role ADMIN
 2. **Credentials → Create credentials → OAuth client ID** → ประเภท **Web application**
 3. **Authorized redirect URIs** ใส่ `https://<โดเมนของคุณ>/api/auth/oauth/google/callback` (เช่น `https://xxx.vercel.app/api/auth/oauth/google/callback`)
 4. คัดลอก **Client ID** และ **Client secret** ไปใส่ `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` แล้ว Redeploy
-5. ถ้าหน้า OAuth consent screen ยังเป็น **Testing** จะเข้าได้เฉพาะอีเมลที่เพิ่มไว้ใน *Test users* — กด **Publish app** เพื่อเปิดให้ทุกคน
+5. ถ้าหน้า OAuth consent screen ยังเป็น **Testing** จะเข้าได้เฉพาะอีเมลที่เพิ่มไว้ใน *Test users* — จะเปิดให้ทุกคนต้องกรอกหน้า **Branding** ให้ครบก่อนกด **Publish app**:
+   - Application home page: `https://<โดเมนของคุณ>`
+   - Application privacy policy link: `https://<โดเมนของคุณ>/privacy` (ระบบมีหน้านี้ให้แล้ว)
+   - Application Terms of Service link: `https://<โดเมนของคุณ>/terms`
+   - Authorised domains: `<โดเมนของคุณ>` เช่น `xxx.vercel.app` · **ไม่ต้องอัปโหลดโลโก้** (ใส่แล้วต้องส่งตรวจ)
+   - ตั้ง `PRIVACY_CONTACT_EMAIL` เพื่อแสดงอีเมลติดต่อในหน้านโยบายความเป็นส่วนตัว (ไม่บังคับ)
 
 **ตั้งค่า LINE Login** ([LINE Developers Console](https://developers.line.biz/console/))
 1. เลือก Provider (จะใช้ Provider เดียวกับ LINE OA ก็ได้) → **Create a new channel → LINE Login** → App types เลือก **Web app**

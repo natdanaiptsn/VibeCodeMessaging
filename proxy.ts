@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIE = "lineoa_session";
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/privacy", "/terms"];
 
 /**
  * ตรวจสอบเบื้องต้น (optimistic): ถ้าไม่มี session cookie ให้ไปหน้า Login
