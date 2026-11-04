@@ -16,6 +16,9 @@ export const POST = route({ rateLimitPerMinute: 10 }, async (ctx) => {
   }
   const input = changePasswordSchema.parse(await readJson(ctx.req, 4096));
   const user = await prisma.user.findUniqueOrThrow({ where: { id: ctx.session.user.id } });
+  if (!user.passwordHash) {
+    throw badRequest("บัญชีนี้เข้าสู่ระบบด้วย Google / LINE จึงไม่มีรหัสผ่านให้เปลี่ยน");
+  }
   if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
     throw badRequest("รหัสผ่านปัจจุบันไม่ถูกต้อง", [{ path: "currentPassword", message: "รหัสผ่านปัจจุบันไม่ถูกต้อง" }]);
   }

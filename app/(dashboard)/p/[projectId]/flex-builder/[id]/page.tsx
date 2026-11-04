@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { requirePageUser } from "@/lib/auth/current-user";
+import { requireProjectPage } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { uuidSchema } from "@/lib/validation/common";
 import { FlexBuilder } from "@/components/flex-builder/flex-builder";
@@ -8,7 +8,7 @@ import { FlexBuilder } from "@/components/flex-builder/flex-builder";
 export const metadata: Metadata = { title: "แก้ไข Flex Message" };
 
 export default async function EditFlexPage({ params }: { params: Promise<{ projectId: string; id: string }> }) {
-  await requirePageUser("templates:view");
+  await requireProjectPage(params, "templates:view");
   const { projectId, id } = await params;
   if (!uuidSchema.safeParse(id).success) notFound();
   const t = await prisma.flexTemplate.findFirst({

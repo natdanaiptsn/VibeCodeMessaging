@@ -16,6 +16,7 @@ const userSelect = {
   lastLoginAt: true,
   lockedUntil: true,
   createdAt: true,
+  identities: { select: { provider: true } },
 } as const;
 
 export const GET = route({ permission: "users:manage" }, async () => {

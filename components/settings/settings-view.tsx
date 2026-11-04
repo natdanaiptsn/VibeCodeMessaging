@@ -4,7 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Loader2, Plus, Save, ShieldCheck, Trash2, UserCog } from "lucide-react";
+import { KeyRound, Link2, Loader2, Plus, Save, ShieldCheck, Trash2, Unlink, UserCog } from "lucide-react";
+import { GoogleIcon, LineIcon } from "@/components/auth/provider-icons";
+import { MembersTab } from "@/components/projects/members-tab";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,7 @@ import { EmptyState, ErrorState, LoadingState, TableSkeleton } from "@/component
 import { apiFetch, ApiClientError, useApiMutation, useApiQuery } from "@/hooks/use-api";
 import { useAppContext, useCan } from "@/hooks/use-app-context";
 import { formatDateTime } from "@/lib/format";
-import { ROLE_LABELS, type Role } from "@/lib/auth/permissions";
+import { SYSTEM_ROLE_LABELS as ROLE_LABELS, type Role } from "@/lib/auth/permissions";
 import { DEFAULT_SETTINGS, type SystemSettings } from "@/lib/validation/settings";
 
 const TIMEZONES = ["Asia/Bangkok", "Asia/Ho_Chi_Minh", "Asia/Jakarta", "Asia/Singapore", "Asia/Kuala_Lumpur", "Asia/Manila", "Asia/Tokyo", "Asia/Seoul", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Taipei", "Asia/Kolkata", "Europe/London", "UTC"];
@@ -214,7 +216,122 @@ function LoggingTab({ draft, setDraft, original }: { draft: SystemSettings; setD
   );
 }
 
+type IdentityInfo = {
+  providers: { id: "google" | "line"; label: string }[];
+  allowSignup: boolean;
+  hasPassword: boolean;
+  identities: { provider: "google" | "line"; email: string | null; displayName: string | null; createdAt: string; lastUsedAt: string | null }[];
+};
+
+const LINK_ERRORS: Record<string, string> = {
+  taken: "บัญชีนี้ผูกกับผู้ใช้อื่นในระบบอยู่แล้ว",
+  cancelled: "ยกเลิกการผูกบัญชีแล้ว",
+  state: "หมดเวลา กรุณากดผูกบัญชีอีกครั้ง",
+  provider: "ผู้ให้บริการยืนยันตัวตนไม่สำเร็จ กรุณาลองใหม่",
+};
+
+/** บัญชี Google / LINE ที่ใช้เข้าสู่ระบบ (Single Sign-On) */
+function LinkedAccounts({ info }: { info: IdentityInfo }) {
+  const { timezone, user } = useAppContext();
+  const qc = useQueryClient();
+  const params = useSearchParams();
+  const [busy, setBusy] = useState<string | null>(null);
+  const linked = params.get("linked");
+  const linkError = params.get("sso_error");
+  const unlink = async (id: string, label: string) => {
+    if (!window.confirm(`ยกเลิกการผูกบัญชี ${label}? (จะเข้าสู่ระบบด้วย ${label} ไม่ได้อีก)`)) return;
+    setBusy(id);
+    try {
+      await apiFetch(`/api/auth/identities/${id}`, { method: "DELETE" });
+      toast.success(`ยกเลิกการผูกบัญชี ${label} แล้ว`);
+      await qc.invalidateQueries({ queryKey: ["identities"] });
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "ยกเลิกไม่สำเร็จ");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Link2 className="size-4 text-primary" /> บัญชีที่ใช้เข้าสู่ระบบ</CardTitle>
+        <CardDescription>ผูกบัญชี Google หรือ LINE เพื่อเข้าสู่ระบบด้วยปุ่มเดียว โดยไม่ต้องจำรหัสผ่าน</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
+          <p className="font-medium">{user.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {user.username && (
+              <>
+                ชื่อผู้ใช้ <code className="font-mono text-foreground">{user.username}</code>
+              </>
+            )}
+            {user.username && user.email && " · "}
+            {user.email}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">บอกชื่อผู้ใช้หรืออีเมลนี้ให้เจ้าของโปรเจกต์ เพื่อเพิ่มคุณเป็นสมาชิกของโปรเจกต์นั้น</p>
+        </div>
+        {linked && <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">ผูกบัญชีเรียบร้อยแล้ว</p>}
+        {linkError && (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-300">
+            {LINK_ERRORS[linkError] ?? LINK_ERRORS.provider}
+          </p>
+        )}
+        {info.providers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            ผู้ดูแลระบบยังไม่ได้เปิดการเข้าสู่ระบบด้วย Google / LINE (ตั้งค่า GOOGLE_CLIENT_ID หรือ LINE_LOGIN_CHANNEL_ID ใน Environment Variables)
+          </p>
+        ) : (
+          <ul className="divide-y rounded-lg border">
+            {info.providers.map((p) => {
+              const identity = info.identities.find((i) => i.provider === p.id);
+              return (
+                <li key={p.id} className="flex flex-wrap items-center gap-3 px-3 py-3">
+                  {p.id === "google" ? (
+                    <span className="flex size-9 items-center justify-center rounded-full border bg-white"><GoogleIcon className="size-5" /></span>
+                  ) : (
+                    <span className="flex size-9 items-center justify-center rounded-full bg-[#06C755] text-white"><LineIcon className="size-6" /></span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{p.label}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {identity
+                        ? `${identity.email ?? identity.displayName ?? "ผูกแล้ว"}${identity.lastUsedAt ? ` · ใช้ล่าสุด ${formatDateTime(identity.lastUsedAt, timezone)}` : ""}`
+                        : "ยังไม่ได้ผูก"}
+                    </p>
+                  </div>
+                  {identity ? (
+                    <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => unlink(p.id, p.label)}>
+                      {busy === p.id ? <Loader2 className="animate-spin" /> : <Unlink />} ยกเลิกการผูก
+                    </Button>
+                  ) : (
+                    <Button asChild size="sm" variant="outline">
+                      <a href={`/api/auth/oauth/${p.id}?mode=link`}><Link2 /> ผูกบัญชี {p.label}</a>
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AccountTab() {
+  const info = useApiQuery<IdentityInfo>(["identities"], "/api/auth/identities");
+  if (info.error) return <ErrorState message={info.error.message} onRetry={() => info.refetch()} />;
+  if (!info.data) return <LoadingState />;
+  return (
+    <div className="grid gap-4">
+      <LinkedAccounts info={info.data} />
+      <PasswordCard hasPassword={info.data.hasPassword} />
+    </div>
+  );
+}
+
+function PasswordCard({ hasPassword }: { hasPassword: boolean }) {
   const { user } = useAppContext();
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -255,10 +372,23 @@ function AccountTab() {
       </Card>
     );
   }
+  if (!hasPassword) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-primary" /> รหัสผ่าน</CardTitle>
+          <CardDescription>{user.name}{user.email ? ` (${user.email})` : ""}</CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          บัญชีนี้เข้าสู่ระบบด้วย Google / LINE จึงไม่มีรหัสผ่าน — ผูกบัญชีไว้มากกว่า 1 แบบ เผื่อเข้าบัญชีหนึ่งไม่ได้
+        </CardContent>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-primary" /> เปลี่ยนรหัสผ่าน Admin</CardTitle>
+        <CardTitle className="flex items-center gap-2"><KeyRound className="size-4 text-primary" /> เปลี่ยนรหัสผ่าน</CardTitle>
         <CardDescription>{user.name} ({identity}) · {ROLE_LABELS[user.role]}</CardDescription>
       </CardHeader>
       <CardContent>
@@ -292,6 +422,7 @@ type UserRow = {
   lockedUntil: string | null;
   createdAt: string;
   managedByEnv: boolean;
+  identities?: { provider: "GOOGLE" | "LINE" }[];
 };
 
 function UsersTab() {
@@ -368,6 +499,9 @@ function UsersTab() {
                   <p className="text-xs text-muted-foreground">
                     {[u.username, u.email].filter(Boolean).join(" · ")}
                     {u.managedByEnv && <Badge variant="info" className="ml-1.5">ตั้งค่าจาก Environment</Badge>}
+                    {u.identities?.map((i) => (
+                      <Badge key={i.provider} variant="outline" className="ml-1.5">{i.provider === "GOOGLE" ? "Google" : "LINE"}</Badge>
+                    ))}
                   </p>
                 </TableCell>
                 <TableCell>
@@ -511,17 +645,22 @@ function ProjectSettings() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const tab = params.get("tab") === "auto-reply" ? "auto-reply" : "general";
+  const requested = params.get("tab");
+  const tab = requested === "auto-reply" || requested === "members" ? requested : "general";
   const settings = useApiQuery<SystemSettings>(["settings"], "/api/settings");
   return (
     <>
-      <PageHeader title="ตั้งค่าโปรเจกต์" description="การทำงานของระบบตอบกลับและ Default Reply ของโปรเจกต์นี้ (แต่ละโปรเจกต์ตั้งค่าแยกกัน)" />
+      <PageHeader title="ตั้งค่าโปรเจกต์" description="การทำงานของระบบตอบกลับ, Default Reply และสมาชิกของโปรเจกต์นี้ (แต่ละโปรเจกต์ตั้งค่าแยกกัน)" />
       <Tabs value={tab} onValueChange={(v) => router.replace(`${pathname}?tab=${v}`, { scroll: false })}>
         <TabsList>
           <TabsTrigger value="general">ทั่วไป</TabsTrigger>
           <TabsTrigger value="auto-reply">Default Reply</TabsTrigger>
+          <TabsTrigger value="members">สมาชิก</TabsTrigger>
         </TabsList>
-        {settings.error ? (
+        <TabsContent value="members">
+          <MembersTab />
+        </TabsContent>
+        {tab === "members" ? null : settings.error ? (
           <ErrorState message={settings.error.message} onRetry={() => settings.refetch()} />
         ) : !settings.data ? (
           <LoadingState />
@@ -543,7 +682,7 @@ function AccountSettings() {
   const params = useSearchParams();
   const canUsers = useCan("users:manage");
   const canAudit = useCan("audit:view");
-  const canSettings = useCan("settings:view");
+  const canSettings = useCan("system:settings");
   const requested = params.get("tab") ?? "account";
   const allowed = new Set(["account", ...(canUsers ? ["users"] : []), ...(canAudit ? ["audit"] : []), ...(canSettings ? ["logging"] : [])]);
   const tab = allowed.has(requested) ? requested : "account";
@@ -551,10 +690,13 @@ function AccountSettings() {
 
   return (
     <>
-      <PageHeader title="บัญชีและผู้ใช้งาน" description="รหัสผ่าน ผู้ใช้งาน Audit Log และระบบ Log — ใช้ร่วมกันทุกโปรเจกต์" />
+      <PageHeader
+        title="บัญชีและผู้ใช้งาน"
+        description={canUsers ? "บัญชีของคุณ ผู้ใช้งานทั้งระบบ Audit Log และระบบ Log (ใช้ร่วมกันทุกโปรเจกต์)" : "บัญชีของคุณและวิธีเข้าสู่ระบบ"}
+      />
       <Tabs value={tab} onValueChange={(v) => router.replace(`/settings?tab=${v}`, { scroll: false })}>
         <TabsList>
-          <TabsTrigger value="account">รหัสผ่าน</TabsTrigger>
+          <TabsTrigger value="account">บัญชีของฉัน</TabsTrigger>
           {canUsers && <TabsTrigger value="users">ผู้ใช้งาน</TabsTrigger>}
           {canAudit && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           {canSettings && <TabsTrigger value="logging">ระบบ Log</TabsTrigger>}

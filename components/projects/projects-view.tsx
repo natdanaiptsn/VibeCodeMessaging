@@ -12,6 +12,7 @@ import {
   CircleSlash,
   FolderPlus,
   Loader2,
+  LogOut,
   MessagesSquare,
   MoreHorizontal,
   Pencil,
@@ -35,7 +36,8 @@ import { Field } from "@/components/common/field";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states";
 import { ProjectAvatar } from "@/components/projects/project-avatar";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
-import { useCan } from "@/hooks/use-app-context";
+import { useAppContext, useCan } from "@/hooks/use-app-context";
+import { can, ROLE_LABELS, type Role } from "@/lib/auth/permissions";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -50,13 +52,25 @@ type Project = {
   connectionStatus: "UNKNOWN" | "CONNECTED" | "FAILED";
   hasCredentials: boolean;
   autoReplyEnabled: boolean;
+  /** บทบาทของฉันในโปรเจกต์นี้ */
+  role: Role;
+  members: number;
   lastWebhookAt: string | null;
   stats: { customers: number; activeRules: number; messages7d: number };
 };
 
-type Filter = "all" | "connected" | "not-connected";
+type Filter = "all" | "mine" | "shared" | "connected" | "not-connected";
 
 const isConnected = (p: Project) => p.connectionStatus === "CONNECTED";
+const isMine = (p: Project) => p.role === "OWNER";
+
+const FILTER_FNS: Record<Filter, (p: Project) => boolean> = {
+  all: () => true,
+  mine: isMine,
+  shared: (p) => !isMine(p),
+  connected: isConnected,
+  "not-connected": (p) => !isConnected(p),
+};
 
 function StatusBadge({ project }: { project: Project }) {
   if (project.connectionStatus === "CONNECTED") {
@@ -98,10 +112,21 @@ function Stat({ icon: Icon, label, value }: { icon: typeof Users; label: string;
   );
 }
 
-function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: () => void; onDelete: () => void }) {
-  const canManage = useCan("projects:manage");
-  const canDelete = useCan("projects:delete");
-  const canLine = useCan("line:view");
+function ProjectCard({
+  project,
+  onEdit,
+  onDelete,
+  onLeave,
+}: {
+  project: Project;
+  onEdit: () => void;
+  onDelete: () => void;
+  onLeave: () => void;
+}) {
+  // สิทธิ์ตามบทบาทของฉันในโปรเจกต์นี้
+  const canManage = can(project.role, "projects:manage");
+  const canDelete = can(project.role, "projects:delete");
+  const canLine = can(project.role, "line:view");
   const base = `/p/${project.id}`;
   const connected = isConnected(project);
   return (
@@ -115,6 +140,11 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
               <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label="โปรเจกต์หลัก" />
             )}
           </Link>
+          {!isMine(project) && (
+            <p className="mb-0.5 flex items-center gap-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+              <Users className="size-3" /> แชร์กับฉัน · {ROLE_LABELS[project.role]}
+            </p>
+          )}
           <p className="truncate text-xs text-muted-foreground">
             {project.displayName ? (
               <>
@@ -126,7 +156,7 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
             )}
           </p>
         </div>
-        {(canManage || canDelete || canLine) && (
+        {(canManage || canDelete || canLine || !isMine(project)) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label={`เมนูของ ${project.name}`}>
@@ -151,6 +181,14 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
                   <DropdownMenuSeparator />
                   <DropdownMenuItem variant="destructive" onSelect={onDelete}>
                     <Trash2 /> ลบโปรเจกต์
+                  </DropdownMenuItem>
+                </>
+              )}
+              {!isMine(project) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onSelect={onLeave}>
+                    <LogOut /> ออกจากโปรเจกต์
                   </DropdownMenuItem>
                 </>
               )}
@@ -337,7 +375,9 @@ function DeleteProjectDialog({ project, onOpenChange }: { project: Project; onOp
 export function ProjectsView() {
   const router = useRouter();
   const params = useSearchParams();
-  const canCreate = useCan("projects:manage");
+  const canCreate = useCan("projects:create");
+  const { user } = useAppContext();
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   // ?create=1 (จากเมนูเลือกโปรเจกต์) เปิดหน้าต่างสร้างโปรเจกต์ทันที
@@ -350,12 +390,24 @@ export function ProjectsView() {
 
   const q = search.trim().toLowerCase();
   const all = data ?? [];
-  const counts = { all: all.length, connected: all.filter(isConnected).length, "not-connected": all.filter((p) => !isConnected(p)).length };
+  const counts = Object.fromEntries(
+    (Object.keys(FILTER_FNS) as Filter[]).map((k) => [k, all.filter(FILTER_FNS[k]).length]),
+  ) as Record<Filter, number>;
   const shown = all.filter(
-    (p) =>
-      (filter === "all" || (filter === "connected" ? isConnected(p) : !isConnected(p))) &&
-      (!q || [p.name, p.description, p.displayName, p.basicId].some((v) => v?.toLowerCase().includes(q))),
+    (p) => FILTER_FNS[filter](p) && (!q || [p.name, p.description, p.displayName, p.basicId].some((v) => v?.toLowerCase().includes(q))),
   );
+
+  const leave = async (p: Project) => {
+    if (!window.confirm(`ออกจากโปรเจกต์ “${p.name}”? (จะเข้าโปรเจกต์นี้ไม่ได้อีกจนกว่าเจ้าของจะเพิ่มกลับ)`)) return;
+    try {
+      // อยู่นอกหน้าโปรเจกต์ จึงระบุโปรเจกต์เองผ่าน header
+      await apiFetch(`/api/members/${user.id}`, { method: "DELETE", headers: { "x-project-id": p.id } });
+      toast.success(`ออกจากโปรเจกต์ “${p.name}” แล้ว`);
+      await qc.invalidateQueries({ queryKey: ["projects"] });
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "ทำรายการไม่สำเร็จ");
+    }
+  };
 
   const closeForm = (open: boolean) => {
     setForm((f) => ({ ...f, open }));
@@ -364,6 +416,8 @@ export function ProjectsView() {
 
   const FILTERS: { key: Filter; label: string }[] = [
     { key: "all", label: "ทั้งหมด" },
+    { key: "mine", label: "ของฉัน" },
+    { key: "shared", label: "แชร์กับฉัน" },
     { key: "connected", label: "เชื่อมต่อแล้ว" },
     { key: "not-connected", label: "ยังไม่เชื่อมต่อ" },
   ];
@@ -372,7 +426,7 @@ export function ProjectsView() {
     <>
       <PageHeader
         title="โปรเจกต์"
-        description="แต่ละโปรเจกต์เชื่อมต่อ LINE OA ได้ 1 บัญชี — กฎตอบกลับ ข้อความ Flex และลูกค้าแยกกันในแต่ละโปรเจกต์"
+        description="โปรเจกต์ของคุณและที่มีคนแชร์ให้ — แต่ละโปรเจกต์เชื่อมต่อ LINE OA ได้ 1 บัญชี กฎตอบกลับ ข้อความ Flex และลูกค้าแยกกัน"
         actions={
           canCreate && (
             <Button onClick={() => setForm({ open: true, project: null })}>
@@ -415,13 +469,31 @@ export function ProjectsView() {
           <EmptyState
             icon={FolderPlus}
             title={all.length === 0 ? "ยังไม่มีโปรเจกต์" : "ไม่พบโปรเจกต์ที่ตรงกับเงื่อนไข"}
-            description={all.length === 0 ? "สร้างโปรเจกต์แล้วเชื่อมต่อ LINE OA เพื่อเริ่มตอบกลับอัตโนมัติ" : undefined}
+            description={
+              all.length === 0
+                ? "สร้างโปรเจกต์แรกของคุณ แล้วเชื่อมต่อ LINE OA เพื่อเริ่มตอบกลับอัตโนมัติ (หรือให้เจ้าของโปรเจกต์เพิ่มคุณเป็นสมาชิก)"
+                : undefined
+            }
+            action={
+              all.length === 0 &&
+              canCreate && (
+                <Button onClick={() => setForm({ open: true, project: null })}>
+                  <Plus /> สร้างโปรเจกต์แรก
+                </Button>
+              )
+            }
           />
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map((p) => (
-            <ProjectCard key={p.id} project={p} onEdit={() => setForm({ open: true, project: p })} onDelete={() => setDeleting(p)} />
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onEdit={() => setForm({ open: true, project: p })}
+              onDelete={() => setDeleting(p)}
+              onLeave={() => leave(p)}
+            />
           ))}
           {canCreate && filter === "all" && !q && (
             <button

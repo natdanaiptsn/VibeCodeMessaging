@@ -16,3 +16,11 @@ export const projectUpdateSchema = z
 
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
+
+const memberRole = z.enum(["OWNER", "ADMIN", "AGENT"]);
+
+export const memberAddSchema = z.object({
+  identifier: z.string().trim().min(3, "กรอกอีเมลหรือชื่อผู้ใช้").max(254),
+  role: memberRole.default("AGENT"),
+});
+export const memberUpdateSchema = z.object({ role: memberRole });

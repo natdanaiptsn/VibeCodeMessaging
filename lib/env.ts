@@ -24,6 +24,19 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().optional(),
   ADMIN_NAME: z.string().optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
+  // เข้าสู่ระบบด้วย Google / LINE (Single Sign-On) — ไม่ตั้ง = ไม่แสดงปุ่มนั้น
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  LINE_LOGIN_CHANNEL_ID: z.string().optional(),
+  LINE_LOGIN_CHANNEL_SECRET: z.string().optional(),
+  // false = เฉพาะผู้ใช้ที่มีบัญชีในระบบแล้ว (หรือผูกบัญชีไว้) จึงเข้าสู่ระบบด้วย Google / LINE ได้
+  AUTH_ALLOW_SIGNUP: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  // สำหรับทดสอบกับ Mock Server เท่านั้น (ค่าเริ่มต้นคือ Google / LINE จริง)
+  OAUTH_TEST_GOOGLE_BASE_URL: z.url().optional(),
+  OAUTH_TEST_LINE_BASE_URL: z.url().optional(),
   QUEUE_WORKER_ENABLED: z
     .enum(["true", "false"])
     .default("true")

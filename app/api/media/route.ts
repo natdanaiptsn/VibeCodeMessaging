@@ -1,4 +1,4 @@
-import { route } from "@/lib/api/handler";
+import { projectRoute } from "@/lib/api/handler";
 import { prisma } from "@/lib/prisma";
 import { ApiError, badRequest } from "@/lib/errors";
 import { sha256Hex } from "@/lib/crypto";
@@ -15,8 +15,10 @@ function mediaUrl(id: string) {
   return `${appUrl() ?? ""}/api/media/${id}`;
 }
 
-export const GET = route({ permission: "templates:view" }, async () => {
+/** รูปที่ผู้ใช้คนนี้อัปโหลดไว้ (ไม่แสดงรูปของบัญชีอื่น) */
+export const GET = projectRoute({ permission: "templates:view" }, async ({ session }) => {
   const items = await prisma.mediaAsset.findMany({
+    where: { uploadedById: session.user.id },
     orderBy: { createdAt: "desc" },
     take: 100,
     select: { id: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true },
@@ -25,7 +27,7 @@ export const GET = route({ permission: "templates:view" }, async () => {
 });
 
 /** อัปโหลดรูปภาพสำหรับ Flex Message (JPEG/PNG ไม่เกิน 4 MB, ตรวจสอบ magic bytes) */
-export const POST = route({ permission: "media:upload", allowMultipart: true, rateLimitPerMinute: 20 }, async (ctx) => {
+export const POST = projectRoute({ permission: "media:upload", allowMultipart: true, rateLimitPerMinute: 20 }, async (ctx) => {
   const length = Number(ctx.req.headers.get("content-length") ?? "0");
   if (length > MAX_BYTES + 256 * 1024) throw new ApiError(413, "ไฟล์มีขนาดใหญ่เกิน 4 MB", "PAYLOAD_TOO_LARGE");
   const form = await ctx.req.formData();
