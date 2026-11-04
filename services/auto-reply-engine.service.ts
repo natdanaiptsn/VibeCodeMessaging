@@ -16,7 +16,8 @@ import type { RuleTrigger, ReplyContentType } from "@/lib/generated/prisma/clien
  *
  * ลำดับการทำงาน:
  * 1. โหลดกฎที่เปิดใช้งานของ trigger นั้น เรียงตาม priority (มาก→น้อย) แล้วตามวันที่สร้าง (เก่า→ใหม่)
- * 2. FIRST_MATCH: ใช้กฎแรกที่ตรง | ALL_MATCHES: ใช้ทุกกฎที่ตรง (ไม่เกิน maxMessagesPerReply และไม่เกิน 5 ข้อความ)
+ * 2. FIRST_MATCH: ใช้กฎแรกที่ตรง | ALL_MATCHES: ใช้ทุกกฎที่ตรง
+ *    แต่ละกฎตอบได้หลายข้อความ (เรียงตามลำดับ) — รวมทั้งหมดไม่เกิน maxMessagesPerReply และไม่เกิน 5 ข้อความ (ข้อจำกัดของ LINE)
  * 3. ไม่พบกฎ → ใช้ Default Reply (ถ้าเปิดใช้งาน และไม่ติด cooldown)
  */
 
@@ -28,8 +29,15 @@ async function fetchActiveRules(projectId: string) {
     orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
     include: {
       keywords: { select: { keyword: true }, orderBy: { createdAt: "asc" } },
-      textTemplate: { select: { id: true, name: true, content: true } },
-      flexTemplate: { select: { id: true, name: true, altText: true, contents: true } },
+      messages: {
+        orderBy: { position: "asc" },
+        select: {
+          type: true,
+          text: true,
+          textTemplate: { select: { content: true } },
+          flexTemplate: { select: { altText: true, contents: true } },
+        },
+      },
     },
   });
 }
@@ -85,6 +93,23 @@ export function buildReplyMessage(spec: ReplySpec, values: Record<string, string
   return r.ok ? { ok: true, message: r.message } : { ok: false, error: r.error };
 }
 
+/** สร้างข้อความทั้งหมดของกฎตามลำดับ (ข้อความที่สร้างไม่ได้จะถูกข้ามและรายงานใน errors) */
+export function buildRuleMessages(rule: { messages: LoadedRule["messages"] }, values: Record<string, string>) {
+  const messages: LineOutgoingMessage[] = [];
+  const errors: string[] = [];
+  rule.messages.forEach((m, i) => {
+    const spec: ReplySpec =
+      m.type === "FLEX"
+        ? { replyType: "FLEX", textTemplate: null, flexTemplate: m.flexTemplate }
+        : { replyType: "TEXT", textTemplate: m.textTemplate ?? (m.text ? { content: m.text } : null), flexTemplate: null };
+    const built = buildReplyMessage(spec, values);
+    if (built.ok) messages.push(built.message);
+    else errors.push(rule.messages.length > 1 ? `ข้อความที่ ${i + 1}: ${built.error}` : built.error);
+  });
+  if (rule.messages.length === 0) errors.push("กฎนี้ยังไม่มีข้อความตอบกลับ");
+  return { messages, errors };
+}
+
 function combinedType(messages: LineOutgoingMessage[]): ReplyContentType | null {
   if (messages.length === 0) return null;
   const types = new Set(messages.map((m) => m.type));
@@ -109,6 +134,7 @@ export async function findMatchingRules(
 ) {
   const rules = (await loadActiveRules(projectId)).filter((r) => r.triggerType === trigger);
   const matched: { rule: LoadedRule; keyword?: string }[] = [];
+  let messageCount = 0;
   for (const rule of rules) {
     if (KEYWORD_TRIGGERS.has(trigger)) {
       const r = matchRule(
@@ -126,7 +152,9 @@ export async function findMatchingRules(
     } else {
       matched.push({ rule });
     }
-    if (mode === "FIRST_MATCH" || matched.length >= limit) break;
+    // จำกัดตามจำนวนข้อความรวม (กฎหนึ่งอาจมีหลายข้อความ)
+    messageCount += Math.max(rule.messages.length, 1);
+    if (mode === "FIRST_MATCH" || messageCount >= limit) break;
   }
   return matched;
 }
@@ -149,14 +177,14 @@ export async function resolveAutoReply(input: EngineInput, settings: SystemSetti
     const errors: string[] = [];
     for (const m of matched) {
       if (messages.length >= limit) break;
-      const built = buildReplyMessage(m.rule, values);
-      if (built.ok) {
-        messages.push(built.message);
-        used.push({ id: m.rule.id, name: m.rule.name, keyword: m.keyword });
-      } else {
-        errors.push(`กฎ "${m.rule.name}": ${built.error}`);
-        if (used.length === 0) used.push({ id: m.rule.id, name: m.rule.name, keyword: m.keyword });
+      const built = buildRuleMessages(m.rule, values);
+      errors.push(...built.errors.map((e) => `กฎ "${m.rule.name}": ${e}`));
+      const room = limit - messages.length;
+      messages.push(...built.messages.slice(0, room));
+      if (built.messages.length > room) {
+        errors.push(`กฎ "${m.rule.name}": ส่งได้ ${room} จาก ${built.messages.length} ข้อความ (จำกัดไม่เกิน ${limit} ข้อความต่อการตอบกลับ)`);
       }
+      if (built.messages.length > 0 || used.length === 0) used.push({ id: m.rule.id, name: m.rule.name, keyword: m.keyword });
     }
     return {
       source: "RULE",

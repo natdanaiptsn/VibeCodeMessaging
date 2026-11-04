@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -9,16 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field } from "@/components/common/field";
 import { KeywordInput } from "@/components/auto-reply/keyword-input";
-import { LineTextBubble } from "@/components/text-messages/line-text-bubble";
-import { ChatBackdrop, FlexPreview } from "@/components/flex/flex-preview";
+import {
+  newMessage,
+  ReplyMessagesEditor,
+  ReplyMessagesPreview,
+  toApiMessages,
+  type FlexTemplateOption,
+  type MessageDraft,
+  type TextTemplateOption,
+} from "@/components/auto-reply/reply-messages-editor";
 import { apiFetch, ApiClientError, useApiQuery } from "@/hooks/use-api";
+import { useCan } from "@/hooks/use-app-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { MATCH_TYPE_LABELS, TRIGGER_LABELS } from "@/lib/labels";
-import { renderTemplate, sampleTemplateValues } from "@/lib/templates/variables";
 import { checkRegexSafety } from "@/lib/auto-reply/regex-safety";
 
 export type RuleRecord = {
@@ -31,14 +36,22 @@ export type RuleRecord = {
   matchType: string;
   keywordLogic: "ANY" | "ALL";
   caseSensitive: boolean;
-  replyType: "TEXT" | "FLEX";
-  textTemplateId: string | null;
-  flexTemplateId: string | null;
+  replyType: "TEXT" | "FLEX" | "MIXED";
   matchCount: number;
   lastMatchedAt: string | null;
   keywords: { id: string; keyword: string }[];
-  textTemplate: { id: string; name: string; content: string } | null;
-  flexTemplate: { id: string; name: string; altText: string } | null;
+  messages: RuleMessageRecord[];
+};
+
+export type RuleMessageRecord = {
+  id: string;
+  position: number;
+  type: "TEXT" | "FLEX";
+  text: string | null;
+  textTemplateId: string | null;
+  flexTemplateId: string | null;
+  textTemplate: { id: string; name: string } | null;
+  flexTemplate: { id: string; name: string } | null;
 };
 
 type FormState = {
@@ -51,12 +64,10 @@ type FormState = {
   keywordLogic: "ANY" | "ALL";
   caseSensitive: boolean;
   keywords: string[];
-  replyType: "TEXT" | "FLEX";
-  textTemplateId: string;
-  flexTemplateId: string;
+  messages: MessageDraft[];
 };
 
-const EMPTY: FormState = {
+const empty = (): FormState => ({
   name: "",
   description: "",
   isActive: true,
@@ -66,10 +77,8 @@ const EMPTY: FormState = {
   keywordLogic: "ANY",
   caseSensitive: false,
   keywords: [],
-  replyType: "TEXT",
-  textTemplateId: "",
-  flexTemplateId: "",
-};
+  messages: [newMessage("TEXT")],
+});
 
 const KEYWORD_TRIGGERS = new Set(["TEXT", "POSTBACK"]);
 
@@ -84,9 +93,11 @@ function toForm(r: RuleRecord, copy = false): FormState {
     keywordLogic: r.keywordLogic,
     caseSensitive: r.caseSensitive,
     keywords: r.keywords.map((k) => k.keyword),
-    replyType: r.replyType,
-    textTemplateId: r.textTemplateId ?? "",
-    flexTemplateId: r.flexTemplateId ?? "",
+    messages: r.messages.length
+      ? r.messages.map((m) =>
+          newMessage(m.type, { textTemplateId: m.textTemplateId ?? "", text: m.text ?? "", flexTemplateId: m.flexTemplateId ?? "" }),
+        )
+      : [newMessage("TEXT")],
   };
 }
 
@@ -132,10 +143,12 @@ function RuleFormBody({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState<FormState>(() => (rule ? toForm(rule, duplicate) : EMPTY));
+  const [form, setForm] = useState<FormState>(() => (rule ? toForm(rule, duplicate) : empty()));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const texts = useApiQuery<{ id: string; name: string; content: string }[]>(["text-templates"], "/api/text-templates");
-  const flexes = useApiQuery<{ id: string; name: string; altText: string; contents: unknown }[]>(["flex-templates"], "/api/flex-templates");
+  const texts = useApiQuery<TextTemplateOption[]>(["text-templates"], "/api/text-templates");
+  const flexes = useApiQuery<FlexTemplateOption[]>(["flex-templates"], "/api/flex-templates");
+  const canSettings = useCan("settings:view");
+  const settings = useApiQuery<{ general: { maxMessagesPerReply: number } }>(["settings"], canSettings ? "/api/settings" : null);
 
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
   const usesKeywords = KEYWORD_TRIGGERS.has(form.triggerType);
@@ -152,9 +165,6 @@ function RuleFormBody({
     return out;
   }, [form.keywords, form.matchType, usesKeywords]);
 
-  const selectedText = texts.data?.find((t) => t.id === form.textTemplateId);
-  const selectedFlex = flexes.data?.find((t) => t.id === form.flexTemplateId);
-
   const submit = async () => {
     setSaving(true);
     setErrors({});
@@ -163,8 +173,7 @@ function RuleFormBody({
         ...form,
         description: form.description || null,
         keywords: usesKeywords ? form.keywords : [],
-        textTemplateId: form.replyType === "TEXT" ? form.textTemplateId || null : null,
-        flexTemplateId: form.replyType === "FLEX" ? form.flexTemplateId || null : null,
+        messages: toApiMessages(form.messages),
       };
       await apiFetch(isEdit ? `/api/rules/${rule!.id}` : "/api/rules", { method: isEdit ? "PUT" : "POST", body });
       toast.success(isEdit ? "บันทึกการแก้ไขกฎแล้ว" : "สร้างกฎตอบกลับแล้ว");
@@ -260,56 +269,15 @@ function RuleFormBody({
             </p>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="รูปแบบการตอบกลับ">
-              <Select value={form.replyType} onValueChange={(v) => set({ replyType: v as "TEXT" | "FLEX" })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TEXT">Text Message</SelectItem>
-                  <SelectItem value="FLEX">Flex Message</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            {form.replyType === "TEXT" ? (
-              <Field label="ข้อความตอบกลับ" required error={errors.textTemplateId}>
-                <Select value={form.textTemplateId} onValueChange={(v) => set({ textTemplateId: v })}>
-                  <SelectTrigger><SelectValue placeholder={texts.isLoading ? "กำลังโหลด..." : "เลือกข้อความ"} /></SelectTrigger>
-                  <SelectContent>
-                    {(texts.data ?? []).map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Field>
-            ) : (
-              <Field label="Flex Message" required error={errors.flexTemplateId}>
-                <Select value={form.flexTemplateId} onValueChange={(v) => set({ flexTemplateId: v })}>
-                  <SelectTrigger><SelectValue placeholder={flexes.isLoading ? "กำลังโหลด..." : "เลือก Flex Message"} /></SelectTrigger>
-                  <SelectContent>
-                    {(flexes.data ?? []).map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-          </div>
-          {((form.replyType === "TEXT" && texts.data?.length === 0) || (form.replyType === "FLEX" && flexes.data?.length === 0)) && (
-            <p className="text-sm text-muted-foreground">
-              ยังไม่มี Template —{" "}
-              <Link className="text-primary underline" href={form.replyType === "TEXT" ? "/text-messages" : "/flex-builder/new"}>
-                สร้าง{form.replyType === "TEXT" ? "ข้อความ" : " Flex Message"}ใหม่
-              </Link>
-            </p>
-          )}
-          {(selectedText || selectedFlex) && (
-            <div className="grid gap-1.5">
-              <Label className="text-xs text-muted-foreground">ตัวอย่างการตอบกลับ (ใช้ค่าตัวอย่างของตัวแปร)</Label>
-              <ChatBackdrop>
-                {form.replyType === "TEXT" && selectedText ? (
-                  <LineTextBubble text={renderTemplate(selectedText.content, sampleTemplateValues())} />
-                ) : selectedFlex ? (
-                  <div className="origin-top-left scale-90"><FlexPreview contents={selectedFlex.contents} /></div>
-                ) : null}
-              </ChatBackdrop>
-            </div>
-          )}
+          <ReplyMessagesEditor
+            messages={form.messages}
+            onChange={(messages) => set({ messages })}
+            texts={texts.data}
+            flexes={flexes.data}
+            errors={errors}
+            maxPerReply={settings.data?.general.maxMessagesPerReply}
+          />
+          <ReplyMessagesPreview messages={form.messages} texts={texts.data} flexes={flexes.data} />
           <label className="flex items-center gap-2 text-sm font-medium">
             <Switch checked={form.isActive} onCheckedChange={(v) => set({ isActive: v })} /> เปิดใช้งานกฎนี้
           </label>

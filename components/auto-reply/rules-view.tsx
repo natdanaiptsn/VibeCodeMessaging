@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/common/states";
 import { Field } from "@/components/common/field";
-import { RuleFormSheet, type RuleRecord } from "@/components/auto-reply/rule-form";
+import { RuleFormSheet, type RuleMessageRecord, type RuleRecord } from "@/components/auto-reply/rule-form";
 import { LineTextBubble } from "@/components/text-messages/line-text-bubble";
 import { ChatBackdrop, FlexPreview } from "@/components/flex/flex-preview";
 import { apiFetch, ApiClientError, useApiMutation, useApiQuery } from "@/hooks/use-api";
@@ -41,6 +41,13 @@ type TestResult = {
   autoReplyEnabled: boolean;
   multiRuleMode: string;
 };
+
+/** ชื่อย่อของข้อความตอบกลับ (แสดงในรายการกฎ) */
+function messageLabel(m: RuleMessageRecord): string {
+  if (m.type === "FLEX") return m.flexTemplate ? `Flex: ${m.flexTemplate.name}` : "ไม่พบ Flex Message";
+  if (m.textTemplate) return m.textTemplate.name;
+  return `“${(m.text ?? "").replace(/\s+/g, " ").slice(0, 40)}”`;
+}
 
 const SKIP_LABEL: Record<string, string> = {
   NO_MATCH: "ไม่พบกฎที่ตรงกัน และไม่ได้เปิด Default Reply สำหรับเหตุการณ์นี้",
@@ -280,9 +287,14 @@ export function RulesView() {
                     </div>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell">
-                    <Badge variant={r.replyType === "FLEX" ? "info" : "secondary"}>{r.replyType === "FLEX" ? "Flex" : "Text"}</Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant={r.replyType === "TEXT" ? "secondary" : "info"}>
+                        {r.replyType === "FLEX" ? "Flex" : r.replyType === "MIXED" ? "Text + Flex" : "Text"}
+                      </Badge>
+                      {r.messages.length > 1 && <Badge variant="outline">{r.messages.length} ข้อความ</Badge>}
+                    </div>
                     <p className="mt-1 max-w-48 truncate text-xs text-muted-foreground">
-                      {r.textTemplate?.name ?? r.flexTemplate?.name ?? <span className="text-destructive">ไม่พบ Template</span>}
+                      {r.messages.length ? messageLabel(r.messages[0]!) : <span className="text-destructive">ยังไม่มีข้อความตอบกลับ</span>}
                     </p>
                   </TableCell>
                   <TableCell className="text-center tabular-nums">{r.priority}</TableCell>
