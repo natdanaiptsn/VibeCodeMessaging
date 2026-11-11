@@ -76,6 +76,22 @@ async function touchIdentity(id: string, profile: SsoProfile) {
   });
 }
 
+/**
+ * บัญชีที่สมัครด้วย LINE หรือชื่อผู้ใช้ แล้วผูก Google ทีหลัง: ใช้อีเมลที่ Google ยืนยันแล้วเป็นอีเมลของบัญชี
+ * เพื่อให้เจ้าของโปรเจกต์เพิ่มเป็นสมาชิกด้วยอีเมลได้ — ไม่ทับอีเมลเดิม และไม่ใช้อีเมลที่บัญชีอื่นใช้อยู่
+ */
+async function adoptVerifiedEmail(userId: string, email: string | null) {
+  if (!email) return;
+  const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (taken) return;
+  try {
+    await prisma.user.updateMany({ where: { id: userId, email: null }, data: { email } });
+  } catch (err) {
+    // มีบัญชีอื่นได้อีเมลนี้ไปพร้อมกันพอดี (unique) — ข้ามไป ไม่ทำให้การเข้าสู่ระบบล้มเหลว
+    if ((err as { code?: string }).code !== "P2002") throw err;
+  }
+}
+
 export async function signInWithProvider(profile: SsoProfile): Promise<SignInResult> {
   const identity = await prisma.userIdentity.findUnique({
     where: { provider_subject: { provider: profile.provider, subject: profile.subject } },
@@ -84,6 +100,7 @@ export async function signInWithProvider(profile: SsoProfile): Promise<SignInRes
   if (identity) {
     if (!identity.user.isActive) return { ok: false, reason: "disabled" };
     await touchIdentity(identity.id, profile);
+    if (!identity.user.email) await adoptVerifiedEmail(identity.user.id, profile.email);
     return { ok: true, user: identity.user, created: false };
   }
 
@@ -145,7 +162,10 @@ export async function linkIdentity(userId: string, profile: SsoProfile) {
     select: { userId: true },
   });
   if (owner && owner.userId !== userId) throw conflict("บัญชีนี้ผูกกับผู้ใช้อื่นในระบบอยู่แล้ว");
-  if (owner) return;
+  if (owner) {
+    await adoptVerifiedEmail(userId, profile.email);
+    return;
+  }
   const existing = await prisma.userIdentity.findUnique({ where: { userId_provider: { userId, provider: profile.provider } } });
   if (existing) throw conflict("ผูกบัญชีประเภทนี้ไว้แล้ว — ยกเลิกการผูกบัญชีเดิมก่อน");
   await prisma.userIdentity.create({
@@ -159,6 +179,7 @@ export async function linkIdentity(userId: string, profile: SsoProfile) {
       lastUsedAt: new Date(),
     },
   });
+  await adoptVerifiedEmail(userId, profile.email);
 }
 
 /** ยกเลิกการผูกบัญชี — ต้องเหลือวิธีเข้าสู่ระบบอย่างน้อย 1 วิธี */
