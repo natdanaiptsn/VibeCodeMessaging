@@ -151,7 +151,7 @@ export async function listMembers(projectId: string) {
       role: true,
       createdAt: true,
       user: {
-        select: { id: true, name: true, username: true, email: true, avatarUrl: true, isActive: true, identities: { select: { provider: true } } },
+        select: { id: true, name: true, username: true, email: true, avatarUrl: true, isActive: true, identities: { select: { provider: true, email: true } } },
       },
     },
   });
@@ -159,7 +159,7 @@ export async function listMembers(projectId: string) {
     userId: m.user.id,
     name: m.user.name,
     username: m.user.username,
-    email: m.user.email,
+    email: m.user.email ?? m.user.identities.find((i) => i.email)?.email ?? null,
     avatarUrl: m.user.avatarUrl,
     isActive: m.user.isActive,
     providers: m.user.identities.map((i) => i.provider),
@@ -178,13 +178,34 @@ async function ownerCount(projectId: string) {
 }
 
 /** เพิ่มสมาชิกด้วยอีเมลหรือชื่อผู้ใช้ของบัญชีที่มีในระบบแล้ว */
+const MEMBER_USER_SELECT = { id: true, name: true, isActive: true } as const;
+
+/**
+ * หาบัญชีจากชื่อผู้ใช้หรืออีเมล — อีเมลดูทั้งอีเมลของบัญชี และอีเมลของบัญชี Google ที่ผูกไว้
+ * (บัญชีที่สมัครด้วย LINE แล้วผูก Google ทีหลัง อาจยังไม่มีอีเมลของบัญชี)
+ */
+async function findUserByIdentifier(identifier: string) {
+  const id = identifier.trim().toLowerCase();
+  if (!id.includes("@")) return prisma.user.findUnique({ where: { username: id }, select: MEMBER_USER_SELECT });
+  const byEmail = await prisma.user.findFirst({
+    where: { email: { equals: id, mode: "insensitive" } },
+    select: MEMBER_USER_SELECT,
+  });
+  if (byEmail) return byEmail;
+  const linked = await prisma.userIdentity.findMany({
+    where: { email: { equals: id, mode: "insensitive" } },
+    select: { user: { select: MEMBER_USER_SELECT } },
+    take: 2,
+  });
+  if (new Set(linked.map((i) => i.user.id)).size > 1) {
+    throw conflict("มีหลายบัญชีที่ผูกอีเมลนี้ไว้ — กรุณาเพิ่มด้วยชื่อผู้ใช้แทน");
+  }
+  return linked[0]?.user ?? null;
+}
+
 export async function addMember(projectId: string, identifier: string, role: UserRole, actorRole: UserRole) {
   assertCanAssign(actorRole, role);
-  const id = identifier.trim().toLowerCase();
-  const user = await prisma.user.findFirst({
-    where: id.includes("@") ? { email: id } : { username: id },
-    select: { id: true, name: true, isActive: true },
-  });
+  const user = await findUserByIdentifier(identifier);
   if (!user || !user.isActive) {
     throw notFound("ไม่พบบัญชีนี้ในระบบ — ให้ผู้ใช้เข้าสู่ระบบด้วย Google หรือ LINE หนึ่งครั้งก่อน แล้วเพิ่มด้วยอีเมลของบัญชีนั้น");
   }
