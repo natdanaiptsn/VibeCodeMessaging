@@ -661,6 +661,15 @@ npm run build
 
 Unit tests ครอบคลุม: การตรวจลายเซ็น Webhook, Keyword matcher (ทุกรูปแบบ + Thai normalization), ป้องกัน ReDoS (รวมการ abort regex ที่ทำงานนาน), Flex validator, URL safety, ตัวแปร Template และโมเดลของ Flex Builder
 
+### ทดสอบผ่านเบราว์เซอร์ (Playwright E2E)
+
+ทดสอบหน้าเว็บจริงแบบอัตโนมัติตามรหัส Test Case (B, D, E, F, H) — รันกับเว็บจริงได้อย่างปลอดภัยด้วยบัญชีทดสอบแยก 2 บัญชี
+วิธีติดตั้งและใช้งานทีละขั้นอยู่ที่ [`e2e/README.md`](e2e/README.md)
+
+```bash
+npm run e2e
+```
+
 ### จำลอง Webhook ในเครื่อง
 
 ```bash
