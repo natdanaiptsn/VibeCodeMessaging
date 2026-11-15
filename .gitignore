@@ -33,6 +33,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!.env.e2e.example
 
 # prisma generated client
 /lib/generated/
@@ -47,3 +48,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright (E2E)
+/e2e/.auth/
+/playwright-report/
+/test-results/
+/blob-report/

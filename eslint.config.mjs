@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
+  {
+    // Playwright fixture มีฟังก์ชันชื่อ use() ซึ่งไม่ใช่ React Hook
+    files: ["e2e/**/*.ts"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
+  },
   globalIgnores([
     ".next/**",
     "out/**",
@@ -19,6 +24,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "lib/generated/**",
     "node_modules/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 
