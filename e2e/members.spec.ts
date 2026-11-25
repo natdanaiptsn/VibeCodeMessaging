@@ -72,7 +72,9 @@ test("B8 เปลี่ยนบทบาทเป็นผู้ดูแล",
   const nav = memberPage.getByRole("navigation");
   await expect(nav.getByRole("link", { name: "ตั้งค่าโปรเจกต์" })).toBeVisible();
   await expect(nav.getByRole("link", { name: "LINE OA Settings" })).toBeVisible();
-  await expect(memberPage.getByRole("button", { name: /เพิ่มกฎ/ })).toBeVisible();
+  // รอรายการกฎโหลดเสร็จก่อน (โปรเจกต์ยังไม่มีกฎ จึงมีปุ่ม “เพิ่มกฎแรก” กลางหน้า) แล้วเช็คปุ่ม “เพิ่มกฎ” ด้านบนแบบชื่อตรงตัว
+  await expect(memberPage.getByRole("button", { name: "เพิ่มกฎแรก", exact: true })).toBeVisible();
+  await expect(memberPage.getByRole("button", { name: "เพิ่มกฎ", exact: true })).toBeVisible();
 
   const asMember = memberApi.forProject(project.id);
   expect((await asMember.call("POST", "/api/rules", ruleBody({ keywords: ["ผู้ดูแล"] }))).status).toBeLessThan(300);
