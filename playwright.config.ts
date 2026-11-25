@@ -23,13 +23,15 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   projects: [
-    { name: "setup", testMatch: /auth\.setup\.ts/, teardown: "cleanup" },
-    { name: "cleanup", testMatch: /cleanup\.teardown\.ts/ },
+    // เทสต์จริงอยู่กลุ่มแรก: โหมด UI (npm run e2e:ui) จะเลือกกลุ่มแรกให้อัตโนมัติ จึงเห็นเทสต์ทั้งหมดทันที
+    // ขั้นล็อกอิน (setup) และเก็บกวาด (cleanup) ยังรันให้เองก่อน/หลังตาม dependencies และ teardown
     {
       name: "chromium",
       testMatch: /.*\.spec\.ts/,
       dependencies: ["setup"],
       use: { ...devices["Desktop Chrome"], storageState: ACCOUNTS.owner.state },
     },
+    { name: "setup", testMatch: /auth\.setup\.ts/, teardown: "cleanup" },
+    { name: "cleanup", testMatch: /cleanup\.teardown\.ts/ },
   ],
 });
